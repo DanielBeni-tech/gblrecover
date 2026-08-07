@@ -1,0 +1,590 @@
+# Design System officiel
+
+## GBLRecover — Interface de Revenue Assurance, recouvrement et pilotage de la dette
+
+| Élément | Valeur |
+|---|---|
+| **Produit** | GBLRecover |
+| **Organisation** | CAMTEL |
+| **Document** | Design System officiel |
+| **Public** | Product Designers, UX Designers, UI Designers, développeurs frontend, QA et Product Managers |
+| **Version** | 1.0 |
+| **Statut** | Référence de conception et d’implémentation |
+| **Direction** | Lead Product Design |
+| **Date** | 7 août 2026 |
+
+> **Rôle du document.** Ce Design System définit le langage visuel, les règles d’interaction et les composants réutilisables de GBLRecover. Il doit être utilisé comme source commune par les designers et les développeurs afin de produire une expérience cohérente, accessible et opérationnelle.
+
+![Palette officielle GBLRecover](https://private-us-east-1.manuscdn.com/sessionFile/Pi5yKjECtRSEIx1VoHnTS1/sandbox/5IXx7KHbqnhbEnyIm5SblP-images_1786105621214_na1fn_L2hvbWUvdWJ1bnR1L0dCTFJlY292ZXJfZGVzaWduX3Rva2Vuc19wYWxldHRl.svg?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvUGk1eUtqRUN0UlNFSXgxVm9IblRTMS9zYW5kYm94LzVJWHg3S0hicW5oYkVueUltNVNibFAtaW1hZ2VzXzE3ODYxMDU2MjEyMTRfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwwZENURkpsWTI5MlpYSmZaR1Z6YVdkdVgzUnZhMlZ1YzE5d1lXeGxkSFJsLnN2ZyIsIkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc4ODIyMDgwMH19fV19&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEQCIBhfPuThTmDIMNOrn9bGjoqyiAHHTXqARDz2~tep5ubsAiBtsA-kSB3QCpK-HyMN4saqxrxoVxxzrF07CMFwX8EPaA__)
+
+---
+
+## 1. Présentation du Design
+
+GBLRecover est une plateforme métier destinée à des utilisateurs qui doivent comprendre rapidement une situation client, analyser une dette, suivre des créances et décider d’une action. Le Design System ne cherche donc pas un effet décoratif : il doit **rendre l’information financière lisible, la décision plus sûre et l’action plus rapide**.
+
+L’interface adopte une esthétique professionnelle, calme et structurée. Elle combine une base neutre claire, un teal de marque inspiré de la confiance et de la maîtrise, des états fonctionnels immédiatement identifiables et une hiérarchie typographique robuste.
+
+### 1.1 Positionnement visuel
+
+| Dimension | Direction |
+|---|---|
+| **Personnalité** | Fiable, analytique, claire, pragmatique |
+| **Densité** | Moyenne à élevée, mais avec respiration et groupement explicite |
+| **Contraste** | Fort pour les données critiques, modéré pour les informations secondaires |
+| **Formes** | Angles légèrement arrondis, surfaces sobres, bordures discrètes |
+| **Couleur** | Teal de marque ; couleurs d’état réservées à leur usage sémantique |
+| **Mouvement** | Court, fonctionnel et jamais distrayant |
+
+### 1.2 Promesse d’expérience
+
+> **Voir juste. Comprendre vite. Agir avec confiance.**
+
+Chaque écran doit répondre à trois questions : où suis-je, quelle information est prioritaire et quelle action est attendue ?
+
+---
+
+## 2. Valeurs UX
+
+### Clarté
+
+L’utilisateur ne doit pas avoir à deviner la signification d’un montant, d’un statut ou d’une action. Les labels sont explicites, les regroupements sont cohérents et les états sont visibles.
+
+### Maîtrise
+
+La plateforme doit donner à l’utilisateur le sentiment de contrôler son portefeuille et non de subir la complexité des données. Les filtres, les confirmations et l’historique rendent les décisions vérifiables.
+
+### Fiabilité
+
+Les données financières sont présentées sans ambiguïté. La fraîcheur d’une donnée, sa source ou son état de synchronisation sont affichés lorsqu’ils influencent la décision.
+
+### Efficacité
+
+Les parcours fréquents — recherche client, consultation créance, enregistrement d’une action — minimisent les clics et les changements de contexte.
+
+### Respect
+
+Les erreurs sont formulées sans blâme. Les alertes indiquent le problème et la prochaine action possible. L’interface respecte la charge cognitive des utilisateurs opérationnels.
+
+| Valeur | Question de contrôle |
+|---|---|
+| Clarté | Un nouvel utilisateur comprend-il l’écran sans explication orale ? |
+| Maîtrise | L’utilisateur sait-il ce qui a été enregistré et ce qui reste à faire ? |
+| Fiabilité | La date de fraîcheur et l’état de la donnée sont-ils accessibles ? |
+| Efficacité | Le parcours évite-t-il les recherches et ressaisies inutiles ? |
+| Respect | Le système aide-t-il sans culpabiliser ni surprendre ? |
+
+---
+
+## 3. Principes UI
+
+1. **La hiérarchie précède la décoration.** Les titres, chiffres et actions principales doivent être identifiables avant tout élément secondaire.
+2. **Une action principale par zone.** Une carte, un formulaire ou une page doit avoir un CTA primaire clairement distingué.
+3. **Les couleurs portent un sens stable.** Le rouge indique une situation critique ou destructive, jamais une décoration.
+4. **Les données financières sont contextualisées.** Montant, devise, période, statut et date de fraîcheur sont présentés ensemble lorsque nécessaire.
+5. **Les états sont explicites.** Un écran prévoit toujours chargement, vide, erreur, succès, accès refusé et obsolescence éventuelle.
+6. **La densité est contrôlée.** Les informations sont regroupées en sections lisibles, avec un espacement suffisant entre les groupes.
+7. **Le système est prévisible.** Les composants se comportent de la même manière sur tous les modules.
+8. **Le contenu est prioritaire.** Les illustrations et ornements ne doivent jamais concurrencer les données de recouvrement.
+
+---
+
+## 4. Palette officielle
+
+### 4.1 Couleurs de marque
+
+| Token | Valeur | Usage |
+|---|---|---|
+| `brand-700` | `#115E59` | État actif profond, texte sur fond clair |
+| `brand-600` | `#0F766E` | Couleur primaire principale |
+| `brand-500` | `#14B8A6` | Accent, focus visuel, éléments interactifs secondaires |
+| `brand-100` | `#CCFBF1` | Fond d’information de marque |
+| `brand-50` | `#F0FDFA` | Surfaces légères et états sélectionnés |
+
+### 4.2 Neutres
+
+| Token | Valeur | Usage |
+|---|---|---|
+| `slate-950` | `#020617` | Texte exceptionnellement fort |
+| `slate-900` | `#0F172A` | Titres, navigation et textes prioritaires |
+| `slate-700` | `#334155` | Texte principal secondaire |
+| `slate-600` | `#475569` | Texte secondaire |
+| `slate-400` | `#94A3B8` | Placeholder et informations atténuées |
+| `slate-300` | `#CBD5E1` | Bordures et séparateurs |
+| `slate-200` | `#E2E8F0` | Bordures légères, surfaces secondaires |
+| `slate-100` | `#F1F5F9` | Fond de page ou de section |
+| `slate-50` | `#F8FAFC` | Surface principale claire |
+| `white` | `#FFFFFF` | Cartes et surfaces de contraste |
+
+### 4.3 Couleurs sémantiques
+
+| Token | Valeur | Signification |
+|---|---|---|
+| `success-600` | `#16A34A` | Paiement confirmé, action réussie, état sain |
+| `success-50` | `#F0FDF4` | Fond de succès |
+| `warning-600` | `#D97706` | Attention, échéance proche, donnée incomplète |
+| `warning-50` | `#FFFBEB` | Fond d’avertissement |
+| `danger-600` | `#DC2626` | Échec, dette critique, action destructive |
+| `danger-50` | `#FEF2F2` | Fond d’erreur ou de danger |
+| `info-600` | `#2563EB` | Information, synchronisation, aide contextuelle |
+| `info-50` | `#EFF6FF` | Fond informatif |
+
+**Règle :** ne jamais communiquer une information uniquement par la couleur. Un label, une icône ou un texte doit compléter le signal visuel.
+
+### 4.4 CSS variables de référence
+
+```css
+:root {
+  --color-brand-600: #0f766e;
+  --color-brand-500: #14b8a6;
+  --color-surface: #ffffff;
+  --color-background: #f8fafc;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-border: #cbd5e1;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+}
+```
+
+---
+
+## 5. Typographie
+
+La typographie recommandée est **Inter**, avec une pile de secours système. Inter est utilisée pour sa lisibilité dans les tableaux, les nombres et les interfaces denses.
+
+```css
+font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+  "Segoe UI", sans-serif;
+```
+
+### 5.1 Échelle typographique
+
+| Style | Taille | Interligne | Graisse | Usage |
+|---|---:|---:|---:|---|
+| Display | 36 px | 44 px | 700 | Très grands indicateurs ou titre exceptionnel |
+| H1 | 30 px | 38 px | 700 | Titre de page |
+| H2 | 24 px | 32 px | 700 | Section majeure |
+| H3 | 20 px | 28 px | 600 | Sous-section ou carte importante |
+| Body large | 16 px | 24 px | 400 | Introduction, texte de confort |
+| Body | 14 px | 20 px | 400 | Texte principal d’application |
+| Label | 13 px | 18 px | 600 | Labels de champ, tableaux et contrôles |
+| Caption | 12 px | 16 px | 400 | Métadonnées, aide et timestamps |
+| Overline | 11 px | 14 px | 700 | Catégorie courte, avec espacement de lettres |
+
+Les montants, pourcentages et chiffres de KPI utilisent des chiffres tabulaires lorsque la police le permet. Les titres sont courts et descriptifs. Les majuscules intégrales sont réservées aux overlines ou codes très courts.
+
+---
+
+## 6. Icônes
+
+Les icônes doivent être simples, linéaires et cohérentes. La bibliothèque recommandée est **Lucide Icons** ou une bibliothèque équivalente approuvée, utilisée à travers un wrapper commun.
+
+| Taille | Usage |
+|---:|---|
+| 12 px | Indicateur secondaire dans un badge |
+| 16 px | Contrôle compact, tableau, champ |
+| 20 px | Bouton, navigation et action standard |
+| 24 px | En-tête de carte ou état illustratif |
+| 32 px | État vide ou illustration fonctionnelle |
+
+Les icônes ne doivent pas remplacer un libellé pour une action critique. Une icône seule est acceptable pour une action universelle et non ambiguë, comme fermer, rechercher ou afficher un menu, à condition de fournir un nom accessible.
+
+---
+
+## 7. Grille
+
+GBLRecover utilise une grille responsive de 12 colonnes sur desktop, avec gouttières de 24 px et marges latérales adaptatives.
+
+| Breakpoint | Largeur indicative | Colonnes | Gouttière | Marge |
+|---|---:|---:|---:|---:|
+| Mobile | < 640 px | 4 | 16 px | 16 px |
+| Tablet | 640–1023 px | 8 | 20 px | 24 px |
+| Desktop | 1024–1279 px | 12 | 24 px | 32 px |
+| Wide | ≥ 1280 px | 12 | 24 px | 48 px |
+
+Les écrans de dashboard utilisent une largeur maximale de contenu afin d’éviter des lignes de lecture excessives. Les tables métier peuvent s’étendre horizontalement dans une zone dédiée, sans provoquer de débordement global de la page.
+
+---
+
+## 8. Espacement
+
+Le système utilise une base de **4 px**. Les espacements sont choisis selon la relation entre les éléments, et non uniquement selon leur taille individuelle.
+
+| Token | Valeur | Usage |
+|---|---:|---|
+| `space-1` | 4 px | Icône et texte très proches |
+| `space-2` | 8 px | Éléments d’un même groupe |
+| `space-3` | 12 px | Padding compact |
+| `space-4` | 16 px | Padding standard |
+| `space-5` | 20 px | Séparation moyenne |
+| `space-6` | 24 px | Carte et section |
+| `space-8` | 32 px | Sections majeures |
+| `space-10` | 40 px | Respiration de page |
+| `space-12` | 48 px | Séparation forte |
+| `space-16` | 64 px | Transition de zones |
+
+### 8.1 Rayons et ombres
+
+| Token | Valeur | Usage |
+|---|---:|---|
+| `radius-sm` | 6 px | Inputs, badges et contrôles compacts |
+| `radius-md` | 8 px | Boutons, cards et menus |
+| `radius-lg` | 12 px | Panels et modales |
+| `radius-xl` | 16 px | Sections visuelles exceptionnelles |
+| `shadow-sm` | 0 1px 2px rgba(15,23,42,.06) | Card standard |
+| `shadow-md` | 0 4px 12px rgba(15,23,42,.10) | Menu, popover, modal légère |
+
+---
+
+## 9. Responsive
+
+Le responsive est conçu à partir du contenu. Les écrans desktop présentent davantage de contexte simultané, tandis que le mobile priorise recherche, consultation et actions essentielles.
+
+| Zone | Desktop | Mobile |
+|---|---|---|
+| Navigation | Sidebar persistante | Sidebar en drawer |
+| Dashboard | Grille de KPI et charts | Empilement vertical priorisé |
+| Table | Colonnes complètes | Colonnes essentielles + détail |
+| Filtres | Barre latérale ou ligne complète | Drawer ou bottom sheet |
+| Formulaire | Deux colonnes lorsque logique | Une colonne |
+| Actions | Boutons avec libellés | CTA principal visible, secondaires dans menu |
+
+Les points de rupture ne doivent pas être utilisés pour masquer une information critique. Si une table devient trop large, elle doit proposer une vue de détail accessible et non simplement tronquer les données.
+
+---
+
+## 10. Accessibilité
+
+L’objectif est une interface utilisable par le plus grand nombre, conformément aux bonnes pratiques d’accessibilité applicables au produit.
+
+### 10.1 Exigences
+
+| Domaine | Règle |
+|---|---|
+| Clavier | Tout contrôle interactif est accessible au clavier |
+| Focus | Focus visible, contrasté et non supprimé sans alternative |
+| Contraste | Texte, icônes porteuses de sens et contrôles suffisamment contrastés |
+| Labels | Chaque champ possède un label programmatique |
+| Erreurs | Les erreurs sont associées au champ et annoncées de façon compréhensible |
+| Couleur | La couleur n’est jamais le seul moyen de transmettre une information |
+| Tableaux | En-têtes et relations de cellules correctement exposés |
+| Modales | Focus piégé, titre explicite et fermeture accessible |
+| Motion | Réduction des animations lorsque l’utilisateur le demande |
+| Langue | Langue du document et libellés cohérents en français |
+
+Les composants shadcn/ui doivent être utilisés avec leurs attributs accessibles et testés au clavier. Toute icône décorative est marquée comme telle ; toute icône informative possède un nom accessible.
+
+---
+
+## 11. Dark Mode
+
+Le Dark Mode est prévu comme mode de présentation secondaire. Il ne s’agit pas d’inverser mécaniquement les couleurs : les surfaces, bordures, textes et états sont redéfinis par tokens sémantiques.
+
+| Token | Light | Dark |
+|---|---|---|
+| `surface-page` | `#F8FAFC` | `#0F172A` |
+| `surface-card` | `#FFFFFF` | `#1E293B` |
+| `text-primary` | `#0F172A` | `#F8FAFC` |
+| `text-secondary` | `#475569` | `#CBD5E1` |
+| `border-default` | `#CBD5E1` | `#475569` |
+| `brand-action` | `#0F766E` | `#2DD4BF` |
+| `danger-action` | `#DC2626` | `#F87171` |
+
+Le Dark Mode doit être testé avec les tableaux, charts et badges. Les couleurs de marque trop lumineuses sont réservées aux accents et ne doivent pas devenir des fonds dominants.
+
+---
+
+## 12. Composants
+
+Les composants sont documentés par leur intention, leur anatomie, leurs propriétés, leurs états et leurs règles d’usage. Chaque composant doit disposer d’un équivalent codé et d’un exemple de référence dans le catalogue de composants.
+
+### 12.1 Anatomie commune
+
+```mermaid
+flowchart LR
+    A[Conteneur] --> B[Label ou titre]
+    B --> C[Contenu principal]
+    C --> D[État ou métadonnée]
+    D --> E[Action éventuelle]
+```
+
+### 12.2 Cards
+
+Les cards regroupent une information ou une tâche autonome. Elles utilisent une surface blanche, une bordure `slate-200`, un rayon `radius-md` et un padding de 20 à 24 px.
+
+| Variante | Usage |
+|---|---|
+| `MetricCard` | KPI avec valeur, tendance et période |
+| `EntityCard` | Résumé client, compte ou créance |
+| `ActionCard` | Action à exécuter ou échéance |
+| `ChartCard` | Visualisation avec titre, légende et date |
+| `EmptyCard` | Absence de données et prochaine action |
+
+Une card ne doit pas contenir plus d’une action primaire. Les valeurs critiques sont placées en haut à gauche ; les métadonnées se trouvent en bas ou dans une zone secondaire.
+
+### 12.3 Buttons
+
+| Variante | Usage |
+|---|---|
+| `Primary` | Action principale de la page ou du formulaire |
+| `Secondary` | Action complémentaire sans risque élevé |
+| `Outline` | Action secondaire visible sur surface neutre |
+| `Ghost` | Action discrète dans une toolbar |
+| `Destructive` | Suppression, annulation irréversible ou révocation |
+| `IconButton` | Action iconographique avec tooltip et nom accessible |
+
+États obligatoires : default, hover, focus, active, disabled, loading et success éventuel. Le bouton loading conserve sa largeur et empêche une double soumission.
+
+### 12.4 Inputs
+
+Un input possède un label, une zone de saisie, un message d’aide optionnel et un message d’erreur éventuel. Le placeholder ne remplace jamais le label.
+
+Variantes : texte, recherche, montant, date, select, combobox, textarea, upload et champ masqué. Les montants affichent la devise attendue et les dates indiquent le format accepté.
+
+### 12.5 Tables
+
+Les tables sont conçues pour la comparaison et le tri. Elles doivent définir une colonne d’identification, des colonnes de valeur, une colonne d’état et une zone d’actions si nécessaire.
+
+| Règle | Application |
+|---|---|
+| Alignement | Texte à gauche, nombres à droite, statuts centrés si compact |
+| En-têtes | Libellés courts, tri explicite et tooltip si nécessaire |
+| Densité | Compacte pour listes opérationnelles, confortable pour lecture |
+| Pagination | Côté serveur au-delà du seuil de volumétrie |
+| Sélection | Checkbox avec action groupée clairement indiquée |
+| États | Loading skeleton, empty state, error state et no-result state |
+
+### 12.6 Charts
+
+Les charts servent une question métier précise. Chaque visualisation possède un titre interprétable, une période, une légende, des unités et une alternative textuelle ou tabulaire.
+
+| Chart | Usage GBLRecover |
+|---|---|
+| Bar chart | Comparer encours par centre ou agence |
+| Line chart | Suivre l’évolution de la dette ou des encaissements |
+| Donut limité | Répartition de statuts, avec maximum de catégories maîtrisé |
+| Aging bars | Répartition par ancienneté de créance |
+| KPI trend | Valeur actuelle, comparaison et direction |
+
+Les charts ne doivent pas utiliser une palette arbitraire. Les couleurs sémantiques sont réservées aux états ; les catégories utilisent une palette secondaire cohérente et accessible.
+
+### 12.7 Pagination
+
+La pagination expose la page courante, le nombre de résultats, les boutons précédent/suivant et, lorsque pertinent, le choix de taille de page. Les boutons sont désactivés lorsque l’action est impossible et portent des labels accessibles.
+
+### 12.8 Badges
+
+Les badges représentent un statut court et stable : `Payée`, `En retard`, `En cours`, `Bloquée`, `À vérifier`. Ils ne sont pas utilisés pour afficher des phrases longues.
+
+| Type | Couleur indicative |
+|---|---|
+| Success | Vert |
+| Warning | Ambre |
+| Danger | Rouge |
+| Info | Bleu |
+| Neutral | Slate |
+
+### 12.9 Alerts
+
+Une alert possède une icône, un titre, un message et éventuellement une action. Les types sont info, success, warning et danger. L’alerte ne doit pas être utilisée pour remplacer une validation de champ ou une notification éphémère.
+
+---
+
+## 13. Navigation
+
+La navigation doit refléter les tâches et non l’organisation technique du backend. Le menu principal recommandé est : Tableau de bord, Clients, Comptes, Factures, Paiements, Créances, Recouvrement, Imports, Rapports et Administration selon le rôle.
+
+Le fil d’Ariane est utilisé lorsque l’utilisateur descend à plus de deux niveaux. Les éléments actifs sont indiqués par contraste, fond subtil et repère visuel ; ils ne dépendent pas uniquement de la couleur.
+
+### 13.1 Sidebar
+
+La sidebar desktop est persistante, largeur cible 248 px, avec logo, contexte utilisateur, navigation primaire et zone de sortie. Elle peut être réduite à 72 px uniquement si les tooltips et labels accessibles sont préservés.
+
+La sidebar mobile devient un drawer. La fermeture est possible par bouton, touche Escape ou clic extérieur. Les éléments non autorisés sont masqués côté interface, mais le backend reste l’autorité de permission.
+
+### 13.2 Navbar
+
+La navbar comprend le titre ou fil de contexte, la recherche globale si applicable, les notifications, le profil et les actions rapides. Elle ne doit pas devenir une seconde sidebar : les actions globales y restent limitées.
+
+### 13.3 Footer
+
+Le footer présente la version de l’application, les liens d’aide, le support et les mentions nécessaires. Il est discret dans les écrans opérationnels mais disponible sur les pages de configuration, d’aide et d’authentification.
+
+---
+
+## 14. Dashboard
+
+Le dashboard est une surface de décision. Il doit commencer par un résumé de la situation puis permettre de descendre vers les dossiers et actions.
+
+### 14.1 Structure recommandée
+
+```mermaid
+flowchart TB
+    A[En-tête : période et périmètre] --> B[KPI : encours, échues, recouvrement, actions]
+    B --> C[Chart : évolution de la dette]
+    B --> D[Chart : aging des créances]
+    C --> E[Table : dossiers prioritaires]
+    D --> E
+    E --> F[Actions rapides : rechercher, importer, exporter]
+```
+
+### 14.2 Règles dashboard
+
+Les KPI doivent afficher valeur, période, périmètre, tendance et date de mise à jour. Les cartes ne doivent pas multiplier les métriques sans hiérarchie. Le dashboard doit mettre en évidence les créances prioritaires et les tâches en retard, pas seulement des chiffres de volume.
+
+### 14.3 KPI cards
+
+Une KPI card contient un label, une valeur principale, une unité éventuelle, une comparaison et une indication de tendance. La tendance doit préciser la période de comparaison et ne pas être interprétée uniquement par la couleur.
+
+---
+
+## 15. Style Guide
+
+### 15.1 Exemple de composition
+
+```text
+Page shell
+├── Navbar
+├── Sidebar
+└── Main content
+    ├── Breadcrumb / page title
+    ├── Toolbar : période, périmètre, actions
+    ├── KPI cards
+    ├── Content cards / charts
+    └── Data table / empty state
+```
+
+### 15.2 Ton rédactionnel
+
+Le produit utilise un langage professionnel, direct et non accusatoire. Les libellés commencent par un verbe lorsque l’action est attendue. Les messages évitent le jargon technique et précisent la résolution possible.
+
+| À éviter | À préférer |
+|---|---|
+| « Erreur système » | « Les données ne peuvent pas être chargées pour le moment. Réessayez. » |
+| « Submit » | « Enregistrer l’action » |
+| « Invalid input » | « Saisissez un montant supérieur à 0. » |
+| « Delete » | « Supprimer la créance » avec confirmation explicite |
+| « Data » | « Données synchronisées le 07/08/2026 à 10:15 » |
+
+### 15.3 Format des données
+
+Les montants utilisent un format local cohérent et affichent la devise. Les dates utilisent un format compréhensible en français. Les statuts sont formulés avec des mots, pas avec des codes seuls.
+
+---
+
+## 16. États des composants
+
+Chaque composant interactif doit prévoir les états suivants lorsque pertinents :
+
+| État | Règle |
+|---|---|
+| Default | Présentation normale et affordance claire |
+| Hover | Feedback subtil, sans déplacement de layout |
+| Focus | Anneau de focus visible et contrasté |
+| Active | Indication de l’action pressée ou sélectionnée |
+| Disabled | Action indisponible, avec raison accessible si nécessaire |
+| Loading | Progression visible, contenu stabilisé et double action empêchée |
+| Error | Message local, cause compréhensible et action de correction |
+| Success | Confirmation claire, non intrusive |
+| Empty | Explication de l’absence et prochaine action |
+| No permission | Absence de données sensible non révélée ; message approprié |
+
+Les skeletons sont réservés aux structures dont le chargement est attendu. Un skeleton ne doit pas simuler une précision inexistante ni rester indéfiniment sans timeout ou message d’erreur.
+
+---
+
+## 17. Animations
+
+Les animations servent à indiquer une transition, une relation ou un résultat. Elles ne doivent jamais ralentir une opération métier.
+
+| Interaction | Animation recommandée |
+|---|---|
+| Ouverture de menu | 120–160 ms, fade et léger déplacement |
+| Ouverture de modal | 160–220 ms, fade + scale léger |
+| Toast | Apparition rapide, disparition contrôlée |
+| Skeleton | Shimmer discret, arrêté à la réception |
+| Changement de page | Transition minimale ou aucune |
+| Mise à jour KPI | Transition courte de valeur, sans effet spectaculaire |
+
+Respecter `prefers-reduced-motion`. Aucun élément critique ne doit dépendre d’une animation pour être compris ou utilisé. Les animations ne doivent pas provoquer de décalage de mise en page.
+
+---
+
+## 18. Règles d’utilisation
+
+### 18.1 Do
+
+Utiliser les tokens plutôt que des couleurs ou espacements arbitraires. Réutiliser les composants existants avant d’en créer un nouveau. Fournir un état vide et un état d’erreur pour chaque nouvelle vue. Vérifier le comportement clavier. Documenter toute variante nouvelle et la raison de son existence.
+
+### 18.2 Don’t
+
+Ne pas utiliser le rouge pour attirer l’attention sans risque réel. Ne pas créer un bouton primaire différent par écran. Ne pas mélanger plusieurs rayons de bordure sans intention. Ne pas placer des actions destructives à côté d’actions principales sans séparation. Ne pas utiliser un placeholder comme unique label. Ne pas créer de chart sans unité, période ou légende.
+
+### 18.3 Quand créer un nouveau composant
+
+Un nouveau composant est justifié si le besoin est récurrent, possède une sémantique claire, ne peut pas être composé simplement à partir de primitives existantes et apporte une amélioration mesurable en cohérence ou en accessibilité. Toute création doit préciser son propriétaire, ses états, son API, ses règles d’usage et son plan de maintenance.
+
+---
+
+## 19. Bonnes pratiques designers et développeurs
+
+| Pratique | Attendu |
+|---|---|
+| Source commune | Les tokens de Figma et du code portent les mêmes noms |
+| Handoff | Chaque écran indique états, responsive, interactions et règles d’erreur |
+| Composants | Les variantes restent limitées et sémantiques |
+| Tests | Les composants critiques sont testés au clavier et avec lecteurs d’écran lorsque nécessaire |
+| Documentation | Chaque composant a un exemple correct et un contre-exemple |
+| Review | Les changements visuels passent par une revue design et technique |
+| Versioning | Les breaking changes sont documentés et annoncés |
+| Mesure | Les décisions de densité et de parcours s’appuient sur l’usage observé |
+
+Les designers doivent concevoir avec les états, et non uniquement avec le happy path. Les développeurs doivent implémenter les tokens et composants partagés plutôt que reproduire visuellement une capture par des valeurs locales.
+
+---
+
+## 20. Gouvernance du Design System
+
+Le Design System est maintenu par une équipe conjointe Design + Frontend. Les demandes sont classées en correction, amélioration, nouveau composant ou breaking change.
+
+| Type de changement | Validation |
+|---|---|
+| Correction visuelle mineure | Revue du mainteneur du composant |
+| Nouveau token | Design lead + frontend lead |
+| Nouveau composant | Revue design, accessibilité et architecture frontend |
+| Breaking change | Comité Design System + plan de migration |
+| Changement de marque | Validation produit et direction concernée |
+
+Chaque version du Design System doit documenter les changements, les composants impactés, les migrations nécessaires et les éventuelles dépréciations.
+
+---
+
+## 21. Critères de qualité d’une nouvelle interface
+
+Avant livraison, une interface GBLRecover doit répondre aux questions suivantes :
+
+1. La hiérarchie visuelle rend-elle l’objectif de l’écran évident ?
+2. Les données sensibles ou financières sont-elles contextualisées ?
+3. Les états loading, empty, error, success et permission sont-ils conçus ?
+4. Le comportement responsive est-il documenté ?
+5. Le contraste, le clavier, le focus et les labels sont-ils vérifiés ?
+6. Les tokens et composants existants sont-ils réutilisés ?
+7. Les actions primaires et destructives sont-elles clairement distinguées ?
+8. Le langage est-il direct, professionnel et non accusatoire ?
+9. L’écran reste-t-il compréhensible sans couleur seule ni animation ?
+10. Le design et le code partagent-ils la même source de vérité ?
+
+---
+
+## Conclusion
+
+Le Design System officiel de GBLRecover fournit un cadre visuel et comportemental commun pour construire une plateforme de Revenue Assurance fiable, lisible et évolutive. Sa valeur ne réside pas uniquement dans la palette ou les composants : elle réside dans la discipline de réutilisation, la prise en compte des états, l’accessibilité et la capacité à transformer des données complexes en décisions compréhensibles.
+
+Toute nouvelle fonctionnalité doit enrichir le système sans fragmenter l’expérience. Les exceptions sont documentées, les composants sont gouvernés et les tokens restent la source commune entre Figma et le code.
+
+## Références
+
+Ce Design System est une spécification interne de conception élaborée pour GBLRecover à partir du contexte produit fourni. Les valeurs de tokens, composants et règles sont les décisions de design proposées pour la version 1.0 et devront être synchronisées avec les fichiers Figma et la bibliothèque frontend officielle.

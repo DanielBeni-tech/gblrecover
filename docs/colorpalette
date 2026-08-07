@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560">
+  <rect width="1200" height="560" fill="#F8FAFC"/>
+  <text x="56" y="58" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700" fill="#0F172A">GBLRecover — Palette officielle</text>
+  <text x="56" y="88" font-family="Inter, Arial, sans-serif" font-size="15" fill="#475569">Référence visuelle des couleurs sémantiques et de marque</text>
+  <g font-family="Inter, Arial, sans-serif">
+    <text x="56" y="135" font-size="17" font-weight="700" fill="#0F172A">Marque</text>
+    <rect x="56" y="154" width="168" height="100" rx="12" fill="#0F766E"/>
+    <text x="72" y="190" font-size="16" font-weight="700" fill="#FFFFFF">Brand 600</text><text x="72" y="220" font-size="15" fill="#CCFBF1">#0F766E</text>
+    <rect x="240" y="154" width="168" height="100" rx="12" fill="#14B8A6"/>
+    <text x="256" y="190" font-size="16" font-weight="700" fill="#FFFFFF">Brand 500</text><text x="256" y="220" font-size="15" fill="#CCFBF1">#14B8A6</text>
+    <rect x="424" y="154" width="168" height="100" rx="12" fill="#CCFBF1"/>
+    <text x="440" y="190" font-size="16" font-weight="700" fill="#134E4A">Brand 100</text><text x="440" y="220" font-size="15" fill="#134E4A">#CCFBF1</text>
+    <text x="56" y="304" font-size="17" font-weight="700" fill="#0F172A">États fonctionnels</text>
+    <rect x="56" y="323" width="168" height="100" rx="12" fill="#16A34A"/>
+    <text x="72" y="359" font-size="16" font-weight="700" fill="#FFFFFF">Success</text><text x="72" y="389" font-size="15" fill="#DCFCE7">#16A34A</text>
+    <rect x="240" y="323" width="168" height="100" rx="12" fill="#D97706"/>
+    <text x="256" y="359" font-size="16" font-weight="700" fill="#FFFFFF">Warning</text><text x="256" y="389" font-size="15" fill="#FEF3C7">#D97706</text>
+    <rect x="424" y="323" width="168" height="100" rx="12" fill="#DC2626"/>
+    <text x="440" y="359" font-size="16" font-weight="700" fill="#FFFFFF">Danger</text><text x="440" y="389" font-size="15" fill="#FEE2E2">#DC2626</text>
+    <rect x="608" y="323" width="168" height="100" rx="12" fill="#2563EB"/>
+    <text x="624" y="359" font-size="16" font-weight="700" fill="#FFFFFF">Info</text><text x="624" y="389" font-size="15" fill="#DBEAFE">#2563EB</text>
+    <text x="650" y="135" font-size="17" font-weight="700" fill="#0F172A">Neutres</text>
+    <rect x="650" y="154" width="112" height="100" rx="12" fill="#0F172A"/><text x="666" y="205" font-size="14" fill="#FFFFFF">#0F172A</text>
+    <rect x="778" y="154" width="112" height="100" rx="12" fill="#475569"/><text x="794" y="205" font-size="14" fill="#FFFFFF">#475569</text>
+    <rect x="906" y="154" width="112" height="100" rx="12" fill="#CBD5E1"/><text x="922" y="205" font-size="14" fill="#0F172A">#CBD5E1</text>
+    <rect x="1034" y="154" width="112" height="100" rx="12" fill="#F8FAFC" stroke="#CBD5E1"/><text x="1050" y="205" font-size="14" fill="#0F172A">#F8FAFC</text>
+  </g>
+</svg>
