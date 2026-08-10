@@ -1,0 +1,32 @@
+SELECT 
+    f.date_emission,
+    TRIM(REPLACE(REPLACE(f.libelle_periode, 'Facture', ''), 'Impayés', '')) AS mois_annee,
+    
+    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture,
+    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye,
+    
+    -- Montant encaisse = Facture - Impaye
+    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) - 
+    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_recouvre,
+    
+    -- Calcul du taux de recouvrement en %
+    ROUND(
+        (
+            (
+                SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) - 
+                SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END)
+            ) / 
+            NULLIF(SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END), 0)
+        ) * 100, 2
+    ) AS taux_recouvrement_pct
+
+FROM facture f
+JOIN compte cp ON f.num_compte = cp.num_compte
+JOIN agence a ON cp.id_agence = a.id_agence
+
+-- Filtre flexible insensible a la casse
+WHERE LOWER(a.nom_centre) LIKE '%littoral%' 
+   OR LOWER(a.nom_centre) LIKE '%douala%'
+
+GROUP BY f.date_emission, TRIM(REPLACE(REPLACE(f.libelle_periode, 'Facture', ''), 'Impayés', ''))
+ORDER BY f.date_emission ASC;
