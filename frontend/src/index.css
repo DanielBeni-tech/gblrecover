@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-primary: #002a5c;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #004085;
+  --color-on-primary-container: #84aefa;
+  --color-primary-fixed: #d7e3ff;
+  --color-primary-fixed-dim: #abc7ff;
+  --color-on-primary-fixed: #001b3f;
+  --color-on-primary-fixed-variant: #0c458b;
+
+  --color-secondary: #785900;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #fdc003;
+  --color-on-secondary-container: #6c5000;
+  --color-secondary-fixed: #ffdf9e;
+  --color-on-secondary-fixed: #261a00;
+  --color-secondary-fixed-dim: #fabd00;
+  --color-on-secondary-fixed-variant: #5b4300;
+
+  --color-tertiary: #222c3c;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #384253;
+  --color-on-tertiary-container: #a4aec3;
+  --color-tertiary-fixed: #d9e3f9;
+  --color-tertiary-fixed-dim: #bdc7dc;
+  --color-on-tertiary-fixed: #121c2c;
+  --color-on-tertiary-fixed-variant: #3d4759;
+
+  --color-surface: #f7f9fb;
+  --color-surface-bright: #f7f9fb;
+  --color-surface-dim: #d8dadc;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f2f4f6;
+  --color-surface-container: #eceef0;
+  --color-surface-container-high: #e6e8ea;
+  --color-surface-container-highest: #e0e3e5;
+  --color-surface-variant: #e0e3e5;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #434751;
+  --color-inverse-surface: #2d3133;
+  --color-inverse-on-surface: #eff1f3;
+  --color-inverse-primary: #abc7ff;
+
+  --color-outline: #737782;
+  --color-outline-variant: #c3c6d2;
+  --color-background: #f7f9fb;
+  --color-on-background: #191c1e;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  --color-success: #1b7f3b;
+  --color-success-container: #d7f4de;
+  --color-warning: #b26a00;
+  --color-warning-container: #ffe3b3;
+
+  --radius-control: 2px;
+  --radius-card: 4px;
+  --radius-panel: 8px;
+}
+
+@utility rounded-control {
+  border-radius: var(--radius-control);
+}
+@utility rounded-card {
+  border-radius: var(--radius-card);
+}
+@utility rounded-panel {
+  border-radius: var(--radius-panel);
+}
+
+/* Label mono : overlines, en-têtes de table, labels de carte */
+@utility t-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Données tabulaires : montants, identifiants, dates */
+@utility t-tabular {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars fines, discrètes (conformes au monde maquette) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface-container-highest) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-surface-container-highest);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline-variant);
+}
