@@ -18,6 +18,7 @@ export function Topbar({ onMenuOpen }: { onMenuOpen: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [session, setSession] = useState(() => JSON.parse(localStorage.getItem("gbl-session") ?? "null") as { user: { name: string; role: string; initials: string } } | null);
 
   const crumbs = useMemo(() => {
@@ -50,26 +51,36 @@ export function Topbar({ onMenuOpen }: { onMenuOpen: () => void }) {
       {/* Breadcrumb / recherche globale */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {crumbs.length > 1 ? (
-          <nav aria-label="Fil d'Ariane" className="flex min-w-0 items-center gap-1.5 text-[14px]">
-            <Link to={crumbs[0]!.to!} className="text-on-surface-variant hover:text-primary">
-              {crumbs[0]!.label}
-            </Link>
-            <ChevronRight className="h-3.5 w-3.5 text-outline" />
-            <span className="truncate font-semibold text-on-surface">{crumbs[crumbs.length - 1]!.label}</span>
-          </nav>
+          <>
+            <nav aria-label="Fil d'Ariane" className="flex min-w-0 items-center gap-1.5 text-[14px]">
+              <Link to={crumbs[0]!.to!} className="text-on-surface-variant hover:text-primary">
+                {crumbs[0]!.label}
+              </Link>
+              <ChevronRight className="h-3.5 w-3.5 text-outline" />
+              <span className="truncate font-semibold text-on-surface">{crumbs[crumbs.length - 1]!.label}</span>
+            </nav>
+            <button onClick={() => setSearchOpen((s) => !s)} aria-label="Rechercher" className="rounded p-1.5 text-on-surface-variant hover:bg-surface-container-high hover:text-primary sm:hidden">
+              <Search className="h-4 w-4" />
+            </button>
+          </>
         ) : (
-          <form onSubmit={submitSearch} className="hidden w-full max-w-md sm:block" role="search">
-            <div className="flex h-9 items-center gap-2 rounded-card border border-outline-variant bg-surface-container-low px-3 transition-colors focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
-              <Search className="h-4 w-4 shrink-0 text-outline" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Recherche rapide globale…"
-                aria-label="Recherche globale"
-                className="w-full bg-transparent text-[14px] text-on-surface outline-none placeholder:text-outline"
-              />
-            </div>
-          </form>
+          <>
+            <button onClick={() => setSearchOpen((s) => !s)} aria-label="Rechercher" className="rounded p-1.5 text-on-surface-variant hover:bg-surface-container-high hover:text-primary sm:hidden">
+              <Search className="h-4 w-4" />
+            </button>
+            <form onSubmit={submitSearch} className={`${searchOpen ? "flex" : "hidden"} w-full max-w-md sm:flex`} role="search">
+              <div className="flex h-9 items-center gap-2 rounded-card border border-outline-variant bg-surface-container-low px-3 transition-colors focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
+                <Search className="h-4 w-4 shrink-0 text-outline" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Recherche rapide globale…"
+                  aria-label="Recherche globale"
+                  className="w-full bg-transparent text-[14px] text-on-surface outline-none placeholder:text-outline"
+                />
+              </div>
+            </form>
+          </>
         )}
       </div>
 

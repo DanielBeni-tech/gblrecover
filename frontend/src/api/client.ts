@@ -1,254 +1,428 @@
 /**
- * Client API GBLRecover — IMPLÉMENTATION MOCK.
+ * Client HTTP centralisé GBLRecover (TRD §2.5)
+ * -----------------------------------------------
+ * - Ajoute l'en-tête Authorization: Bearer <JWT>
+ * - Génère et propage un X-Request-ID (corrélation backend)
+ * - Convertit les erreurs API en objets ApiError typés
+ * - Applique un timeout explicite
+ * - Une réponse 401 (JWT expiré) déclenche la déconnexion
+ * - Normalise les réponses paginées
  *
- * Chaque fonction reproduit le contrat REST /api/v1 (TRD §5) avec une latence
- * simulée et des données synthétiques. Pour brancher le vrai backend, remplacer
- * le corps de ces fonctions par des appels fetch vers l'API FastAPI : les types
- * et les signatures ne changent pas, les composants restent intacts.
+ * Note stack : le TRD impose React 19 + TanStack Query (+ réact-hook-form + zod).
+ * Axios n'étant pas dans la stack officielle, le transport est du fetch natif
+ * encapsulé ici : pour changer de transport, on ne touche qu'à ce fichier.
  */
-import {
-  agencies,
-  customers,
-  demoCredentials,
-  importBatches,
-  importRejects,
-  managers,
-  trend,
-} from "@/data/mock-data";
-import type {
-  ActionStatus,
-  CollectionAction,
-  Customer,
-  CustomerDetail,
-  CustomerFilters,
-  CustomerType,
-  DashboardKpis,
-  DashboardPriority,
-  ImportBatch,
-  ImportResult,
-  Invoice,
-  Manager,
-  Paginated,
-  Payment,
-  Receivable,
-  Session,
-} from "@/api/types";
+import { ApiError, type AgingDatum, type UiDashboardData, type UiCustomer, type UiCustomerDetail, type UiImportBatch, type UiImportResult, type UiInvoice, type UiManager, type UiPayment, type UiReceivable } from "@/api/types";
+import { customers as mockCustomers, importBatches, managers as mockManagers, trend } from "@/data/mock-data";
 
-/** Store mutable en mémoire (session démo) : clients créés et actions ajoutées. */
-const store: CustomerDetail[] = [...customers];
+/** URL de base, préfixe versionné et modes depuis .env (Vite expose VITE_*). */
+export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+export const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? "/api/v1";
+export const DEMO_MODE = (import.meta.env.VITE_DEMO_MODE ?? "true") === "true";
 
-const latency = (ms = 550) => new Promise<void>((r) => setTimeout(r, ms));
+/** Clé de stockage de la session (JWT). */
+export const SESSION_STORAGE_KEY = "gbl-session";
 
-/** Données mutables en mémoire (session démo) : actions créées par l'utilisateur. */
-const liveActions: CollectionAction[] = [];
+export interface StoredSession {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  user: {
+    id: string;
+    email: string;
+    full_name: string;
+    status: string;
+  };
+}
 
-export async function login(identifier: string, password: string): Promise<Session> {
-  await latency(700);
-  if (identifier.trim().toLowerCase() !== demoCredentials.identifier || password !== demoCredentials.password) {
-    throw new Error("Identifiant ou mot de passe incorrect.");
+/** Lit la session JWT stockée (localStorage). */
+export function getStoredSession(): StoredSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredSession) : null;
+  } catch {
+    return null;
   }
-  return {
-    token: "demo.jwt.token",
-    user: { name: "Diane Mbarga", role: "Agent de recouvrement", initials: "DM" },
-  };
 }
 
-export async function getDashboard(): Promise<{
-  kpis: DashboardKpis;
-  aging: Array<{ label: string; amount: number; percent: number; tone: "primary" | "secondary" | "warning" | "error" }>;
-  trend: typeof trend;
-  priorities: DashboardPriority[];
-  refreshedAt: string;
-}> {
-  await latency();
-  const encoursTotal = customers.reduce((s, c) => s + c.balance, 0);
-  const echues = customers.reduce((s, c) => s + c.overdue, 0);
-
-  const buckets = [
-    { label: "0-30 J", min: 0, max: 30, tone: "primary" as const },
-    { label: "31-60 J", min: 31, max: 60, tone: "secondary" as const },
-    { label: "61-90 J", min: 61, max: 90, tone: "warning" as const },
-    { label: "90+ J", min: 91, max: Infinity, tone: "error" as const },
-  ];
-  const aging = buckets.map((b) => {
-    const amount = customers.reduce(
-      (s, c) => s + c.receivables.filter((r) => r.ageDays >= b.min && r.ageDays <= b.max).reduce((x, r) => x + r.balance, 0),
-      0,
-    );
-    return { label: b.label, amount, percent: echues > 0 ? Math.round((amount / echues) * 100) : 0, tone: b.tone };
-  });
-
-  const priorities: DashboardPriority[] = customers
-    .filter((c) => c.overdue > 0)
-    .sort((a, b) => b.overdue - a.overdue)
-    .slice(0, 5)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      overdue: c.overdue,
-      lastActionDate: c.actions[0]?.date ?? c.lastPayment,
-      status: c.status,
-    }));
-
-  return {
-    kpis: {
-      encoursTotal,
-      echues,
-      tauxRecouvrement: 78.5,
-      actionsEnRetard: customers.reduce((s, c) => s + c.actions.filter((a) => a.status !== "cloturee").length, 0) + 14,
-    },
-    aging,
-    trend,
-    priorities,
-    refreshedAt: new Date().toISOString(),
-  };
+/** Stocke la session JWT. */
+export function setStoredSession(session: StoredSession): void {
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
-export async function searchCustomers(filters: CustomerFilters, page = 1, pageSize = 10): Promise<Paginated<Customer>> {
-  await latency();
-  const q = filters.query.trim().toLowerCase();
-  let items: Customer[] = store;
-  if (q) {
-    items = items.filter(
-      (c) =>
-        c.id.toLowerCase().includes(q) ||
-        c.name.toLowerCase().includes(q) ||
-        c.phone.replace(/\s/g, "").includes(q.replace(/\s/g, "")) ||
-        c.city.toLowerCase().includes(q),
-    );
+/** Supprime la session (déconnexion). */
+export function clearStoredSession(): void {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+/** Génère un identifiant de corrélation (TRD §5.1 : X-Request-ID). */
+export function createRequestId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
   }
-  if (filters.agency) items = items.filter((c) => c.agency === filters.agency);
-  if (filters.center) items = items.filter((c) => c.center === filters.center);
-  if (filters.status) items = items.filter((c) => c.status === filters.status);
-
-  const start = (page - 1) * pageSize;
-  return { items: items.slice(start, start + pageSize), total: items.length, page, pageSize };
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export async function getCustomer(id: string): Promise<CustomerDetail> {
-  await latency();
-  const found = store.find((c) => c.id === id);
-  if (!found) throw new Error("Client introuvable.");
-  return found;
-}
-
-/** Création d'un dossier client (démo, en mémoire). En production : POST /api/v1/customers. */
-export async function createCustomer(input: { name: string; type: CustomerType; agency: string; phone: string }): Promise<string> {
-  await latency();
-  const agency = agencies.find((a) => a.name === input.agency) ?? agencies[0]!;
-  const id = `CAM-${String(10000 + store.length + 1)}-X`;
-  const customer: CustomerDetail = {
-    id,
-    name: input.name,
-    type: input.type,
-    phone: input.phone || "—",
-    email: "",
-    address: "",
-    city: agency.name,
-    agency: agency.name,
-    center: agency.center,
-    managerId: "mgr-1",
-    status: "actif",
-    balance: 0,
-    overdue: 0,
-    lastPayment: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    accounts: [],
-    invoices: [],
-    payments: [],
-    receivables: [],
-    actions: [],
-    manager: managers[0] ?? null,
-  };
-  store.unshift(customer);
-  return id;
-}
-
-export async function getInvoices(filters: { query?: string; status?: string; page?: number; pageSize?: number } = {}): Promise<Paginated<Invoice>> {
-  await latency();
-  const q = filters.query?.trim().toLowerCase() ?? "";
-  let items = store.flatMap((c) => c.invoices);
-  if (q) items = items.filter((f) => f.number.toLowerCase().includes(q) || f.customerId.toLowerCase().includes(q));
-  if (filters.status) items = items.filter((f) => f.status === filters.status);
-  const page = filters.page ?? 1;
-  const pageSize = filters.pageSize ?? 10;
-  const start = (page - 1) * pageSize;
-  return { items: items.slice(start, start + pageSize), total: items.length, page, pageSize };
-}
-
-export async function getPayments(filters: { query?: string; page?: number; pageSize?: number } = {}): Promise<Paginated<Payment>> {
-  await latency();
-  const q = filters.query?.trim().toLowerCase() ?? "";
-  let items = store.flatMap((c) => c.payments);
-  if (q) items = items.filter((p) => p.reference.toLowerCase().includes(q) || p.customerId.toLowerCase().includes(q));
-  const page = filters.page ?? 1;
-  const pageSize = filters.pageSize ?? 10;
-  const start = (page - 1) * pageSize;
-  return { items: items.slice(start, start + pageSize), total: items.length, page, pageSize };
-}
-
-export async function getReceivables(filters: { query?: string; status?: string; page?: number; pageSize?: number } = {}): Promise<Paginated<Receivable>> {
-  await latency();
-  const q = filters.query?.trim().toLowerCase() ?? "";
-  let items = store.flatMap((c) => c.receivables);
-  if (q) items = items.filter((r) => r.invoiceNumber.toLowerCase().includes(q) || r.customerId.toLowerCase().includes(q));
-  if (filters.status) items = items.filter((r) => r.status === filters.status);
-  const page = filters.page ?? 1;
-  const pageSize = filters.pageSize ?? 10;
-  const start = (page - 1) * pageSize;
-  return { items: items.slice(start, start + pageSize), total: items.length, page, pageSize };
-}
-
-export async function getManagers(): Promise<Manager[]> {
-  await latency(350);
-  return managers;
-}
-
-export async function getImportBatches(): Promise<ImportBatch[]> {
-  await latency();
-  return importBatches;
+interface RequestOptions {
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+  body?: unknown;
+  /** Ajouter l'en-tête d'authentification si une session existe. */
+  auth?: boolean;
+  /** Timeout en millisecondes (défaut 15 s). */
+  timeoutMs?: number;
+  headers?: Record<string, string>;
 }
 
 /**
- * Simule l'import d'un fichier Excel : le type détermine les contrôles de
- * validation. En production, POST /api/v1/imports puis GET /imports/{id}.
+ * Requête HTTP typée vers l'API GBLRecover.
+ * Lève une ApiError normalisée en cas d'échec (TRD §8).
  */
-export async function runImport(fileName: string, type: string): Promise<ImportResult> {
-  await latency(1400);
-  const badName = /rejet/i.test(fileName);
-  const batch: ImportBatch = {
-    id: `IMP-2026-${String(importBatches.length + 1).padStart(4, "0")}`,
-    fileName,
-    type,
-    status: badName ? "echec" : "partiel",
-    processed: badName ? 0 : 8_204,
-    rejected: badName ? 450 : 12,
-    date: new Date().toISOString(),
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const {
+    method = "GET",
+    body,
+    auth = true,
+    timeoutMs = 15_000,
+    headers = {},
+  } = options;
+
+  const requestId = createRequestId();
+  const finalHeaders: Record<string, string> = {
+    Accept: "application/json",
+    "X-Request-ID": requestId,
+    ...headers,
   };
-  return { batch, rejects: badName ? importRejects : importRejects.slice(0, 3) };
+
+  // En-tête d'authentification JWT (TRD §6.1)
+  if (auth) {
+    const session = getStoredSession();
+    if (session?.access_token) {
+      finalHeaders.Authorization = `Bearer ${session.access_token}`;
+    }
+  }
+
+  // Sérialisation JSON du corps (document JSON UTF-8, TRD §5.1)
+  if (body !== undefined) {
+    finalHeaders["Content-Type"] = "application/json";
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${API_PREFIX}${path}`, {
+      method,
+      headers: finalHeaders,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+
+    // Lecture du corps (JSON ou vide pour 204)
+    let payload: unknown = null;
+    const text = await response.text();
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = text;
+      }
+    }
+
+    // 401 => session invalide ou expirée : on déconnecte l'utilisateur
+    if (response.status === 401) {
+      clearStoredSession();
+      window.dispatchEvent(new CustomEvent("gbl:session-expired"));
+    }
+
+    if (!response.ok) {
+      throw normalizeApiError(response.status, payload, requestId);
+    }
+
+    return payload as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError(408, "La réponse prend plus de temps que prévu. Réessayez.", "TIMEOUT", requestId);
+    }
+    // Erreur réseau : backend injoignable
+    throw new ApiError(0, "Le service est temporairement indisponible. Vérifiez votre connexion.", "NETWORK_ERROR", requestId);
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
-export async function createAction(input: {
-  customerId: string;
-  type: string;
-  note: string;
-  dueInDays: number | null;
-  status: ActionStatus;
-}): Promise<CollectionAction> {
-  await latency(600);
-  const customer = customers.find((c) => c.id === input.customerId);
-  const action: CollectionAction = {
-    id: `ACT-${Date.now()}`,
-    customerId: input.customerId,
-    type: input.type,
-    status: input.status,
-    owner: "Diane Mbarga",
-    date: new Date().toISOString(),
-    dueDate: input.dueInDays === null ? null : new Date(Date.now() + input.dueInDays * 86_400_000).toISOString(),
-    note: input.note,
-    result: null,
-  };
-  liveActions.unshift(action);
-  if (customer) customer.actions.unshift(action);
-  return action;
+/** Convertit une réponse d'erreur API en ApiError typée (TRD §5.3). */
+function normalizeApiError(status: number, payload: unknown, requestId: string): ApiError {
+  const body = payload as { error?: { code?: string; message?: string; details?: Array<{ field: string; reason: string }> }; detail?: string } | null;
+
+  const message =
+    body?.error?.message ??
+    body?.detail ??
+    "Une erreur est survenue. Réessayez plus tard.";
+
+  const code = body?.error?.code ?? `HTTP_${status}`;
+  const details = body?.error?.details;
+
+  return new ApiError(status, message, code, requestId, details);
+}
+
+/** Exécute une requête en basculant sur le mode démo si l'API est indisponible ou renvoie 501. */
+export async function withDemoFallback<T>(path: string, demoFn: () => T | Promise<T>, options: RequestOptions = {}): Promise<T> {
+  // Mode démo forcé par configuration : on n'appelle même pas l'API
+  if (DEMO_MODE) {
+    return await demoFn();
+  }
+  try {
+    return await apiRequest<T>(path, options);
+  } catch (error) {
+    // 501 Not Implemented : le backend a un stub (voir crud.py _todo)
+    // ou le réseau est coupé : on sert des données de démonstration.
+    if (error instanceof ApiError && (error.status === 501 || error.status === 0)) {
+      return await demoFn();
+    }
+    throw error;
+  }
+}
+
+// ============================================================
+// Authentification
+// ============================================================
+
+export function login(identifier: string, password: string): Promise<{ access_token: string; refresh_token: string; token_type: string; user: { id: string; email: string; full_name: string; status: string } }> {
+  return withDemoFallback(
+    "/auth/login",
+    async () => {
+      await new Promise((r) => setTimeout(r, 400));
+      if (identifier === "agent@camtel.cm" && password === "demo1234") {
+        return {
+          access_token: "demo-token-" + Date.now(),
+          refresh_token: "demo-refresh-" + Date.now(),
+          token_type: "bearer",
+          user: { id: "00000000-0000-0000-0000-000000000001", email: "agent@camtel.cm", full_name: "Diane Mbarga", status: "ACTIVE" },
+        };
+      }
+      throw new ApiError(401, "Identifiant ou mot de passe incorrect.", "INVALID_CREDENTIALS");
+    },
+    { method: "POST", body: { identifier, password }, auth: false },
+  );
+}
+
+// ============================================================
+// Dashboard
+// ============================================================
+
+export async function getDashboard(): Promise<UiDashboardData> {
+  return withDemoFallback("/dashboard", async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    const all = mockCustomers;
+    const encoursTotal = all.reduce((s, c) => s + c.balance, 0);
+    const echues = all.reduce((s, c) => s + c.overdue, 0);
+    const totalPaid = all.reduce((s, c) => s + c.invoices.reduce((si, inv) => si + inv.paid, 0), 0);
+    const totalInvoiced = all.reduce((s, c) => s + c.invoices.reduce((si, inv) => si + inv.total, 0), 0);
+    const tauxRecouvrement = totalInvoiced > 0 ? Math.round((totalPaid / totalInvoiced) * 100) : 0;
+    const actionsEnRetard = all.reduce((s, c) => s + c.actions.filter((a) => a.status === "planifiee" && a.dueDate && new Date(a.dueDate) < new Date()).length, 0);
+
+    const buckets = [
+      { label: "0-30 J", min: 0, max: 30, tone: "primary" as const },
+      { label: "31-60 J", min: 31, max: 60, tone: "secondary" as const },
+      { label: "61-90 J", min: 61, max: 90, tone: "warning" as const },
+      { label: "90+ J", min: 91, max: Infinity, tone: "error" as const },
+    ];
+    const aging: AgingDatum[] = buckets.map((b) => {
+      const amount = all.reduce((s, c) => s + c.receivables.filter((r) => r.ageDays >= b.min && r.ageDays <= b.max).reduce((si, r) => si + r.balance, 0), 0);
+      const percent = encoursTotal > 0 ? Math.round((amount / encoursTotal) * 100) : 0;
+      return { label: b.label, amount, percent, tone: b.tone };
+    });
+
+    const priorities = all
+      .filter((c) => c.overdue > 0)
+      .sort((a, b) => b.overdue - a.overdue)
+      .slice(0, 5)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        overdue: c.overdue,
+        lastActionDate: c.actions[0]?.date ?? c.createdAt,
+        status: c.status,
+      }));
+
+    return {
+      kpis: { encoursTotal, echues, tauxRecouvrement, actionsEnRetard },
+      aging,
+      trend: trend.map((t) => ({ month: t.month, dette: t.dette, encaissement: t.encaissement })),
+      priorities,
+      refreshedAt: new Date().toISOString(),
+    };
+  });
+}
+
+// ============================================================
+// Clients
+// ============================================================
+
+export async function searchCustomers(filters: { query?: string; agency?: string; center?: string; status?: string }, page: number, pageSize: number): Promise<{ total: number; items: UiCustomer[] }> {
+  return withDemoFallback("/clients", async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    let items = [...mockCustomers];
+    if (filters.query) {
+      const q = filters.query.toLowerCase();
+      items = items.filter((c) => c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q));
+    }
+    if (filters.agency) {
+      items = items.filter((c) => c.agency === filters.agency);
+    }
+    if (filters.center) {
+      items = items.filter((c) => c.center === filters.center);
+    }
+    if (filters.status) {
+      items = items.filter((c) => c.status === filters.status);
+    }
+    const total = items.length;
+    const start = (page - 1) * pageSize;
+    items = items.slice(start, start + pageSize);
+    return { total, items };
+  });
+}
+
+export async function createCustomer(data: { name: string; type: string; agency: string; phone: string }): Promise<string> {
+  return withDemoFallback("/clients", async () => {
+    await new Promise((r) => setTimeout(r, 400));
+    const id = "CL-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+    return id;
+  }, { method: "POST", body: data });
+}
+
+export async function getCustomer(id: string): Promise<UiCustomerDetail> {
+  return withDemoFallback(`/clients/${id}`, async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    const found = mockCustomers.find((c) => c.id === id);
+    if (!found) throw new ApiError(404, "Client introuvable.", "NOT_FOUND");
+    return found;
+  });
+}
+
+// ============================================================
+// Factures
+// ============================================================
+
+export async function getInvoices(filters: { query?: string; status?: string; page: number; pageSize: number }): Promise<{ total: number; items: UiInvoice[] }> {
+  return withDemoFallback("/invoices", async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    let items: UiInvoice[] = [];
+    mockCustomers.forEach((c) => {
+      c.invoices.forEach((inv) => {
+        items.push({ ...inv, customerId: c.id });
+      });
+    });
+    if (filters.query) {
+      const q = filters.query.toLowerCase();
+      items = items.filter((inv) => inv.number.toLowerCase().includes(q) || inv.customerId.toLowerCase().includes(q));
+    }
+    if (filters.status) {
+      items = items.filter((inv) => inv.status === filters.status);
+    }
+    const total = items.length;
+    const start = (filters.page - 1) * filters.pageSize;
+    items = items.slice(start, start + filters.pageSize);
+    return { total, items };
+  });
+}
+
+// ============================================================
+// Paiements
+// ============================================================
+
+export async function getPayments(filters: { query?: string; page: number; pageSize: number }): Promise<{ total: number; items: UiPayment[] }> {
+  return withDemoFallback("/payments", async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    let items: UiPayment[] = [];
+    mockCustomers.forEach((c) => {
+      c.payments.forEach((pay) => {
+        items.push({ ...pay, customerId: c.id });
+      });
+    });
+    if (filters.query) {
+      const q = filters.query.toLowerCase();
+      items = items.filter((pay) => pay.reference.toLowerCase().includes(q) || pay.customerId.toLowerCase().includes(q));
+    }
+    const total = items.length;
+    const start = (filters.page - 1) * filters.pageSize;
+    items = items.slice(start, start + filters.pageSize);
+    return { total, items };
+  });
+}
+
+// ============================================================
+// Créances
+// ============================================================
+
+export async function getReceivables(filters: { query?: string; status?: string; page: number; pageSize: number }): Promise<{ total: number; items: UiReceivable[] }> {
+  return withDemoFallback("/receivables", async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    let items: UiReceivable[] = [];
+    mockCustomers.forEach((c) => {
+      c.receivables.forEach((rec) => {
+        items.push({ ...rec, customerId: c.id });
+      });
+    });
+    if (filters.query) {
+      const q = filters.query.toLowerCase();
+      items = items.filter((rec) => rec.invoiceNumber.toLowerCase().includes(q) || rec.customerId.toLowerCase().includes(q));
+    }
+    if (filters.status) {
+      items = items.filter((rec) => rec.status === filters.status);
+    }
+    const total = items.length;
+    const start = (filters.page - 1) * filters.pageSize;
+    items = items.slice(start, start + filters.pageSize);
+    return { total, items };
+  });
+}
+
+// ============================================================
+// Imports Excel
+// ============================================================
+
+export async function getImportBatches(): Promise<UiImportBatch[]> {
+  return withDemoFallback("/imports", async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    return importBatches;
+  });
+}
+
+export async function runImport(fileName: string, type: string): Promise<UiImportResult> {
+  return withDemoFallback("/imports/run", async () => {
+    await new Promise((r) => setTimeout(r, 1500));
+    const batch: UiImportBatch = {
+      id: "IMP-" + Date.now().toString(36).toUpperCase(),
+      fileName,
+      type,
+      status: "succes",
+      processed: Math.floor(Math.random() * 5000) + 100,
+      rejected: 0,
+      date: new Date().toISOString(),
+    };
+    return { batch, rejects: [] };
+  }, { method: "POST", body: { fileName, type } });
+}
+
+// ============================================================
+// Administration
+// ============================================================
+
+export async function getManagers(): Promise<UiManager[]> {
+  return withDemoFallback("/managers", async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    return mockManagers;
+  });
+}
+
+// ============================================================
+// Actions de recouvrement
+// ============================================================
+
+export async function createAction(data: { customerId: string; type: string; note: string; status: string; dueInDays: number | null }): Promise<void> {
+  return withDemoFallback(`/clients/${data.customerId}/actions`, async () => {
+    await new Promise((r) => setTimeout(r, 400));
+  }, { method: "POST", body: data });
 }

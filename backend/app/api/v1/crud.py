@@ -1,6 +1,6 @@
 from sqlalchemy import cast, func, or_, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from passlib.context import CryptContext
 from uuid import UUID
 
@@ -125,13 +125,20 @@ async def get_user_permissions(db: AsyncSession, user_id: UUID) -> list[str]:
 
 
 async def get_centres(db: AsyncSession, page: int = 1, page_size: int = 25):
-    stmt = select(Centre).limit(page_size).offset((page - 1) * page_size)
+    stmt = (
+        select(Centre)
+        .options(selectinload(Centre.agences))
+        .limit(page_size)
+        .offset((page - 1) * page_size)
+    )
     result = await db.execute(stmt)
     return result.scalars().all()
 
 
 async def get_centre(db: AsyncSession, centre_id: str):
-    result = await db.execute(select(Centre).where(Centre.nom_centre == centre_id))
+    result = await db.execute(
+        select(Centre).options(selectinload(Centre.agences)).where(Centre.nom_centre == centre_id)
+    )
     return result.scalars().first()
 
 
@@ -231,7 +238,7 @@ async def get_organization_hierarchy(db: AsyncSession):
 
 
 async def get_clients(db: AsyncSession, q: str | None = None, status: str | None = None, client_type: str | None = None, marche: str | None = None, page: int = 1, page_size: int = 25):
-    stmt = select(Client)
+    stmt = select(Client).options(selectinload(Client.comptes))
     if q:
         pattern = f"%{q}%"
         stmt = stmt.where(
@@ -248,7 +255,9 @@ async def get_clients(db: AsyncSession, q: str | None = None, status: str | None
 
 
 async def get_client(db: AsyncSession, client_id: int):
-    result = await db.execute(select(Client).where(Client.code_client == client_id))
+    result = await db.execute(
+        select(Client).options(selectinload(Client.comptes)).where(Client.code_client == client_id)
+    )
     return result.scalars().first()
 
 

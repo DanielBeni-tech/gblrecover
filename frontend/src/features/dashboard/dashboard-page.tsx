@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowRight, Clock, RefreshCw, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, ListTodo, RefreshCw, TrendingUp } from "lucide-react";
 import { getDashboard } from "@/api/client";
+import type { UiPriorityItem } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,6 +125,65 @@ export function DashboardPage() {
         />
       </div>
 
+      {(() => {
+        const actions: Array<{ icon: typeof AlertTriangle; title: string; desc: string; link: string; linkLabel: string; tone: "error" | "warning" | "primary" }> = [];
+        if (kpis.echues > 0) {
+          actions.push({
+            icon: AlertTriangle,
+            title: `${kpis.echues.toLocaleString("fr-FR")} créances échues`,
+            desc: "Des dossiers nécessitent une action immédiate de recouvrement.",
+            link: "/clients",
+            linkLabel: "Voir les dossiers prioritaires",
+            tone: "error",
+          });
+        }
+        if (kpis.actionsEnRetard > 0) {
+          actions.push({
+            icon: Clock,
+            title: `${kpis.actionsEnRetard.toLocaleString("fr-FR")} actions en retard`,
+            desc: "Des échéances d'actions de recouvrement sont dépassées.",
+            link: "/clients",
+            linkLabel: "Consulter les actions",
+            tone: "warning",
+          });
+        }
+        if (actions.length === 0) {
+          actions.push({
+            icon: ListTodo,
+            title: "Tout est en ordre",
+            desc: "Aucune action urgente pour le moment. Continuez la surveillance quotidienne.",
+            link: "/clients",
+            linkLabel: "Parcourir le portefeuille",
+            tone: "primary",
+          });
+        }
+        return (
+          <Card className="border-l-4 border-l-primary">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ListTodo className="h-5 w-5 text-primary" /> Prochaine action
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {actions.map((a, i) => (
+                  <div key={i} className={`flex flex-col gap-2 rounded-card border p-4 ${a.tone === "error" ? "border-error/30 bg-error-container" : a.tone === "warning" ? "border-warning/30 bg-warning-container" : "border-primary/30 bg-primary-container"}`}>
+                    <div className="flex items-center gap-2">
+                      <a.icon className={`h-4 w-4 ${a.tone === "error" ? "text-error" : a.tone === "warning" ? "text-warning" : "text-primary"}`} />
+                      <p className={`text-[15px] font-semibold ${a.tone === "error" ? "text-on-error-container" : a.tone === "warning" ? "text-on-warning-container" : "text-on-primary-container"}`}>{a.title}</p>
+                    </div>
+                    <p className={`text-[13px] ${a.tone === "error" ? "text-on-error-container" : a.tone === "warning" ? "text-on-warning-container" : "text-on-primary-container"}`}>{a.desc}</p>
+                    <Link to={a.link} className={`t-label mt-auto w-fit items-center gap-1 ${a.tone === "error" ? "text-error" : a.tone === "warning" ? "text-warning" : "text-primary"} hover:underline`}>
+                      {a.linkLabel} <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -163,7 +223,7 @@ export function DashboardPage() {
               </tr>
             </TableHeader>
             <TableBody>
-              {priorities.map((p) => (
+              {priorities.map((p: UiPriorityItem) => (
                 <TableRow key={p.id}>
                   <TableCell className="t-tabular text-primary-container">
                     <Link to={`/clients/${p.id}`} className="hover:underline">

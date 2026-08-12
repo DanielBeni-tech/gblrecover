@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getInvoices } from "@/api/client";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -67,8 +68,16 @@ export function InvoicesPage() {
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
-        ) : data && data.items.length === 0 ? (
-          <EmptyState title="Aucune facture trouvée" description="Modifiez votre recherche ou vos filtres de statut." />
+      ) : data && data.items.length === 0 ? (
+        <EmptyState
+          title="Aucune facture dans ce périmètre"
+          description="Vérifiez les filtres de recherche et de statut, ou consultez un client pour voir ses factures."
+          action={
+            <Button variant="outline" size="sm" onClick={() => {}}>
+              Consulter un client
+            </Button>
+          }
+        />
         ) : (
           <div className="overflow-x-auto">
             <Table className="min-w-[900px]">

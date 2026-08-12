@@ -164,7 +164,7 @@ class AccountRead(BaseModel):
     id_agence: str
     code_client: int
     e_bill: Optional[str]
-    statut_souscription: Optional[str]
+    statut_facturation: Optional[str]
     identification: Optional[str]
     balance: float
 

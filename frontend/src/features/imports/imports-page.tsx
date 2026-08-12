@@ -12,7 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 import { getImportBatches, runImport } from "@/api/client";
-import type { ImportResult } from "@/api/types";
+import type { UiImportResult } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +38,7 @@ export function ImportsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [type, setType] = useState("Factures");
   const [validating, setValidating] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [result, setResult] = useState<UiImportResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const toast = useToast();

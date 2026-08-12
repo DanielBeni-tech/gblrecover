@@ -1,96 +1,165 @@
 @import "tailwindcss";
 
+/* ============================================================
+   GBLRecover — Design System officiel (docs/Design System officiel)
+   Palette : teal de marque + neutres slate + états sémantiques
+   Typographie : Inter
+   ============================================================ */
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-primary: #002a5c;
+  /* ---- Marque (brand) ---- */
+  --color-brand-50: #f0fdfa;
+  --color-brand-100: #ccfbf1;
+  --color-brand-200: #99f6e4;
+  --color-brand-300: #5eead4;
+  --color-brand-400: #2dd4bf;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0f766e;
+  --color-brand-700: #115e59;
+  --color-brand-800: #134e4a;
+  --color-brand-900: #042f2e;
+
+  /* ---- Neutres (slate) ---- */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
+
+  /* ---- États sémantiques ---- */
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-info-50: #eff6ff;
+  --color-info-100: #dbeafe;
+  --color-info-600: #2563eb;
+  --color-info-700: #1d4ed8;
+
+  /* ---- Rayons (Design System §8.1) ---- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* ============================================================
+     Aliases de compatibilité (shadcn/ui + design system interne) :
+     les composants UI réutilisent des noms génériques (primary,
+     error, surface-*) qui pointent vers la charte teal officielle.
+     ============================================================ */
+  --color-primary: #0f766e;
   --color-on-primary: #ffffff;
-  --color-primary-container: #004085;
-  --color-on-primary-container: #84aefa;
-  --color-primary-fixed: #d7e3ff;
-  --color-primary-fixed-dim: #abc7ff;
-  --color-on-primary-fixed: #001b3f;
-  --color-on-primary-fixed-variant: #0c458b;
+  --color-primary-container: #ccfbf1;
+  --color-on-primary-container: #134e4a;
+  --color-primary-fixed: #ccfbf1;
+  --color-primary-fixed-dim: #99f6e4;
+  --color-on-primary-fixed: #042f2e;
+  --color-on-primary-fixed-variant: #115e59;
 
-  --color-secondary: #785900;
+  --color-secondary: #64748b;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #fdc003;
-  --color-on-secondary-container: #6c5000;
-  --color-secondary-fixed: #ffdf9e;
-  --color-on-secondary-fixed: #261a00;
-  --color-secondary-fixed-dim: #fabd00;
-  --color-on-secondary-fixed-variant: #5b4300;
+  --color-secondary-container: #e2e8f0;
+  --color-on-secondary-container: #334155;
+  --color-secondary-fixed: #f1f5f9;
+  --color-on-secondary-fixed: #0f172a;
+  --color-secondary-fixed-dim: #cbd5e1;
+  --color-on-secondary-fixed-variant: #475569;
 
-  --color-tertiary: #222c3c;
+  --color-tertiary: #0f172a;
   --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #384253;
-  --color-on-tertiary-container: #a4aec3;
-  --color-tertiary-fixed: #d9e3f9;
-  --color-tertiary-fixed-dim: #bdc7dc;
-  --color-on-tertiary-fixed: #121c2c;
-  --color-on-tertiary-fixed-variant: #3d4759;
+  --color-tertiary-container: #e2e8f0;
+  --color-on-tertiary-container: #334155;
+  --color-tertiary-fixed: #f1f5f9;
+  --color-tertiary-fixed-dim: #cbd5e1;
+  --color-on-tertiary-fixed: #0f172a;
+  --color-on-tertiary-fixed-variant: #475569;
 
-  --color-surface: #f7f9fb;
-  --color-surface-bright: #f7f9fb;
-  --color-surface-dim: #d8dadc;
+  --color-surface: #f8fafc;
+  --color-surface-bright: #ffffff;
+  --color-surface-dim: #e2e8f0;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f2f4f6;
-  --color-surface-container: #eceef0;
-  --color-surface-container-high: #e6e8ea;
-  --color-surface-container-highest: #e0e3e5;
-  --color-surface-variant: #e0e3e5;
-  --color-on-surface: #191c1e;
-  --color-on-surface-variant: #434751;
-  --color-inverse-surface: #2d3133;
-  --color-inverse-on-surface: #eff1f3;
-  --color-inverse-primary: #abc7ff;
+  --color-surface-container-low: #f1f5f9;
+  --color-surface-container: #e2e8f0;
+  --color-surface-container-high: #e2e8f0;
+  --color-surface-container-highest: #cbd5e1;
+  --color-surface-variant: #e2e8f0;
+  --color-on-surface: #0f172a;
+  --color-on-surface-variant: #475569;
+  --color-inverse-surface: #1e293b;
+  --color-inverse-on-surface: #f8fafc;
+  --color-inverse-primary: #2dd4bf;
 
-  --color-outline: #737782;
-  --color-outline-variant: #c3c6d2;
-  --color-background: #f7f9fb;
-  --color-on-background: #191c1e;
+  --color-outline: #94a3b8;
+  --color-outline-variant: #cbd5e1;
+  --color-background: #f8fafc;
+  --color-on-background: #0f172a;
 
-  --color-error: #ba1a1a;
+  --color-error: #dc2626;
   --color-on-error: #ffffff;
-  --color-error-container: #ffdad6;
-  --color-on-error-container: #93000a;
+  --color-error-container: #fee2e2;
+  --color-on-error-container: #7f1d1d;
 
-  --color-success: #1b7f3b;
-  --color-success-container: #d7f4de;
-  --color-warning: #b26a00;
-  --color-warning-container: #ffe3b3;
+  --color-success: #16a34a;
+  --color-success-container: #dcfce7;
+  --color-on-success-container: #14532d;
 
-  --radius-control: 2px;
-  --radius-card: 4px;
-  --radius-panel: 8px;
+  --color-warning: #d97706;
+  --color-warning-container: #fef3c7;
+  --color-on-warning-container: #78350f;
+
+  --color-info: #2563eb;
+  --color-info-container: #dbeafe;
+  --color-on-info-container: #1e3a8a;
 }
 
+/* ---- Rayons (Design System §8.1) ---- */
 @utility rounded-control {
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
 }
 @utility rounded-card {
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-md);
 }
 @utility rounded-panel {
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-lg);
 }
 
-/* Label mono : overlines, en-têtes de table, labels de carte */
+/* ---- Ombres (Design System §8.1) ---- */
+@utility shadow-card {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+}
+@utility shadow-popover {
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.1);
+}
+
+/* ---- Chiffres tabulaires pour les montants ---- */
+@utility t-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Label technique (overline) ---- */
 @utility t-label {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 500;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-}
-
-/* Données tabulaires : montants, identifiants, dates */
-@utility t-tabular {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 18px;
 }
 
 html,
@@ -100,16 +169,22 @@ body,
 }
 
 body {
-  background-color: var(--color-background);
-  color: var(--color-on-surface);
+  background-color: var(--color-slate-50);
+  color: var(--color-slate-900);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbars fines, discrètes (conformes au monde maquette) */
+/* Focus visible, contrasté (Design System §10.1) */
+*:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+/* Scrollbars discrètes */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-surface-container-highest) transparent;
+  scrollbar-color: var(--color-slate-200) transparent;
 }
 *::-webkit-scrollbar {
   width: 6px;
@@ -119,9 +194,19 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: var(--color-surface-container-highest);
+  background: var(--color-slate-200);
   border-radius: 4px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--color-outline-variant);
+  background: var(--color-slate-300);
+}
+
+/* Préfère réduire les animations (accessibilité) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

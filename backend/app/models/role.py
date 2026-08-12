@@ -17,3 +17,4 @@ class Role(TimestampMixin, Base):
     status = Column(String(50), nullable=False, default="ACTIVE")
 
     users = relationship("User", secondary="user_roles", back_populates="roles")
+    permissions = relationship("Permission", secondary="role_permissions", back_populates="roles")

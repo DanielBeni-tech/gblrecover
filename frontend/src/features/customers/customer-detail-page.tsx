@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Building2, CalendarClock, CheckCircle2, Mail, MessageSquare, Phone } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Building2, CalendarClock, CheckCircle2, Mail, MessageSquare, Phone } from "lucide-react";
 import { createAction, getCustomer } from "@/api/client";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, customerStatusLabel, customerStatusTone, invoiceStatusLabel, invoiceStatusTone, paymentStatusLabel, paymentStatusTone, receivableStatusLabel, receivableStatusTone } from "@/components/ui/badge";
@@ -127,6 +127,28 @@ export function CustomerDetailPage() {
         active={tab}
         onChange={(t) => setSearchParams(t === "resume" ? {} : { tab: t })}
       />
+
+      {metrics && metrics.montantEchu > 0 && (
+        <div className="flex items-start gap-3 rounded-panel border border-warning/30 bg-warning-container p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+          <div className="flex flex-col gap-1">
+            <p className="text-[15px] font-semibold text-on-warning-container">
+              {xaf(metrics.montantEchu)} de créances échues — action requise
+            </p>
+            <p className="text-[13px] text-on-warning-container">
+              Ce client a des dettes en retard. Prochaine étape recommandée : planifier une relance ou une mise en demeure depuis l'onglet Créances ou Historique.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => setActionOpen(true)}>
+                <MessageSquare className="h-3.5 w-3.5" /> Nouvelle action de recouvrement
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setSearchParams({ tab: "creances" })}>
+                Voir les créances <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tab === "resume" && metrics && (
         <div className="grid grid-cols-12 gap-5">

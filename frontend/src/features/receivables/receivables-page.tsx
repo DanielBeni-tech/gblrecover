@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getReceivables } from "@/api/client";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -67,8 +68,16 @@ export function ReceivablesPage() {
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
-        ) : data && data.items.length === 0 ? (
-          <EmptyState title="Aucune créance trouvée" description="Le périmètre ne contient pas de dette ouverte, ou ajustez les filtres." />
+      ) : data && data.items.length === 0 ? (
+        <EmptyState
+          title="Aucune créance ouverte"
+          description="Toutes les dettes sont réglées ou les filtres sont trop restrictifs. Ajustez votre recherche pour voir plus de résultats."
+          action={
+            <Button variant="outline" size="sm" onClick={() => {}}>
+              Consulter les clients
+            </Button>
+          }
+        />
         ) : (
           <div className="overflow-x-auto">
             <Table className="min-w-[900px]">

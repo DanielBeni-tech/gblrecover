@@ -1,5 +1,5 @@
 import { CalendarClock } from "lucide-react";
-import type { CollectionAction } from "@/api/types";
+import type { UiCollectionAction } from "@/api/types";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { dateFr } from "@/lib/format";
 
@@ -15,7 +15,7 @@ const actionLabel: Record<string, string> = {
   cloturee: "Clôturée",
 };
 
-export function Timeline({ actions }: { actions: CollectionAction[] }) {
+export function Timeline({ actions }: { actions: UiCollectionAction[] }) {
   if (actions.length === 0) {
     return <p className="py-6 text-center text-[13px] text-on-surface-variant">Aucune action enregistrée pour le moment.</p>;
   }

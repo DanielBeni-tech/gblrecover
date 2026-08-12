@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPayments } from "@/api/client";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { Badge, paymentStatusLabel, paymentStatusTone } from "@/components/ui/badge";
@@ -52,8 +53,16 @@ export function PaymentsPage() {
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
-        ) : data && data.items.length === 0 ? (
-          <EmptyState title="Aucun paiement trouvé" description="Modifiez votre recherche ou la période." />
+      ) : data && data.items.length === 0 ? (
+        <EmptyState
+          title="Aucun paiement enregistré"
+          description="Vérifiez votre recherche ou attendez les prochains encaissements pour voir les paiements ici."
+          action={
+            <Button variant="outline" size="sm" onClick={() => {}}>
+              Voir les créances
+            </Button>
+          }
+        />
         ) : (
           <div className="overflow-x-auto">
             <Table className="min-w-[860px]">

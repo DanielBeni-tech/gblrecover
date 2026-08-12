@@ -1,13 +1,228 @@
 /**
- * Types de domaine GBLRecover — calqués sur le contrat API /api/v1 (TRD §5).
- * Le client mock (client.ts) renvoie ces types ; l'équipe backend branchera
- * le même contrat sur les endpoints réels sans toucher aux composants.
+ * Types GBLRecover — calqués sur le contrat réel /api/v1 (backend/app/api/v1/schemas.py).
+ * Les champs correspondent EXACTEMENT aux réponses Pydantic : code_client,
+ * raison_sociale, num_compte, id_facture, id_paiement, etc.
  */
 
-export type CustomerType = "entreprise" | "particulier" | "etat";
-export type CustomerStatus = "actif" | "impaye" | "contentieux" | "irrecouvrable";
+// ============================================================
+// Authentification
+// ============================================================
 
-export interface Customer {
+export interface AuthUser {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthToken {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  user: AuthUser | null;
+}
+
+// ============================================================
+// Organisation (centres / agences / gestionnaires)
+// ============================================================
+
+export interface Centre {
+  nom_centre: string;
+  agences?: Agency[] | null;
+}
+
+export interface Agency {
+  id_agence: string;
+  nom_centre: string;
+  nom_agence: string | null;
+}
+
+export interface Manager {
+  mat_gestionnaire: string;
+  nom_gestionnaire: string;
+  tel_gestionnaire: number | null;
+  email_gestionnaire: string | null;
+}
+
+// ============================================================
+// Clients et comptes
+// ============================================================
+
+export interface Client {
+  code_client: number;
+  raison_sociale: string;
+  marche: string | null;
+  email: string | null;
+  tel: number | null;
+  comptes?: Account[] | null;
+}
+
+export interface Account {
+  num_compte: number;
+  mat_gestionnaire: string | null;
+  id_agence: string;
+  code_client: number;
+  e_bill: string | null;
+  statut_facturation: string | null;
+  identification: string | null;
+  balance: number;
+}
+
+export interface ClientSummary {
+  total_balance: number;
+  total_accounts: number;
+  total_outstanding: number;
+}
+
+export interface ClientHistoryItem {
+  timestamp: string;
+  action: string;
+  note: string | null;
+}
+
+// ============================================================
+// Factures, paiements, créances
+// ============================================================
+
+export interface Invoice {
+  id_facture: string;
+  num_compte: number;
+  date_emission: string | null;
+  montant_facture: number | null;
+  paid_amount: number | null;
+  outstanding_amount: number | null;
+  status: string | null;
+}
+
+export interface Payment {
+  id_paiement: string;
+  id_facture: string;
+  date_paiement: string | null;
+  montant_paye: number | null;
+}
+
+export interface ReceivableSummary {
+  total_outstanding: number;
+  overdue_amount: number;
+  open_invoices: number;
+}
+
+// ============================================================
+// Recouvrement
+// ============================================================
+
+export type CollectionActionStatus = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+
+export interface CollectionAction {
+  id: string;
+  account_id: number;
+  action_type: string;
+  due_date: string;
+  comment: string | null;
+  priority: string | null;
+  created_by: string;
+  status: string;
+  completed_at: string | null;
+  result: string | null;
+  assigned_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionActionDashboard {
+  by_status: Record<string, number>;
+  due_today: number;
+  overdue: number;
+}
+
+// ============================================================
+// Dashboards (lignes de rapports / vues SQL — colonnes permissives)
+// ============================================================
+
+/** Ligne générique d'un dashboard : le backend projette les colonnes des vues SQL. */
+export interface ReportRow {
+  [key: string]: string | number | null | undefined;
+}
+
+export interface DashboardSummary extends ReportRow {}
+export interface DashboardAging extends ReportRow {}
+export interface DashboardTrend extends ReportRow {}
+export interface DashboardActivity extends ReportRow {}
+
+// ============================================================
+// Pagination
+// ============================================================
+
+export interface PageMeta {
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface Paginated<T> {
+  items: T[];
+  meta: PageMeta;
+}
+
+// ============================================================
+// Erreurs API normalisées (TRD §5.3)
+// ============================================================
+
+export interface ApiErrorBody {
+  error?: {
+    code?: string;
+    message?: string;
+    details?: Array<{ field: string; reason: string }>;
+    request_id?: string;
+  };
+  detail?: string;
+}
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  requestId?: string;
+  details?: Array<{ field: string; reason: string }>;
+
+  constructor(status: number, message: string, code = "API_ERROR", requestId?: string, details?: Array<{ field: string; reason: string }>) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+    this.details = details;
+  }
+}
+
+// ============================================================
+// Modèle UI (utilisé par les composants et mock-data)
+// ============================================================
+
+export type CustomerType = "entreprise" | "particulier" | "etat";
+
+export interface UiCenter {
+  id: string;
+  name: string;
+}
+
+export interface UiAgency {
+  id: string;
+  name: string;
+  center: string;
+}
+
+export interface UiManager {
+  id: string;
+  name: string;
+  role: string;
+  agency: string;
+  workload: number;
+}
+
+export interface UiCustomer {
   id: string;
   name: string;
   type: CustomerType;
@@ -18,31 +233,34 @@ export interface Customer {
   agency: string;
   center: string;
   managerId: string;
-  status: CustomerStatus;
-  /** Solde total en XAF */
-  balance: number;
-  /** Créances échues en XAF */
-  overdue: number;
-  lastPayment: string;
+  status: string;
   createdAt: string;
+  lastPayment: string;
+  overdue: number;
+  balance: number;
 }
 
-export type AccountStatus = "actif" | "suspendu" | "cloture";
+export interface UiCustomerDetail extends UiCustomer {
+  accounts: UiAccount[];
+  invoices: UiInvoice[];
+  payments: UiPayment[];
+  receivables: UiReceivable[];
+  actions: UiCollectionAction[];
+  manager: UiManager | null;
+}
 
-export interface Account {
+export interface UiAccount {
   id: string;
   customerId: string;
   number: string;
   agency: string;
   center: string;
   managerId: string;
-  status: AccountStatus;
+  status: string;
   balance: number;
 }
 
-export type InvoiceStatus = "payee" | "partielle" | "impayee" | "annulee";
-
-export interface Invoice {
+export interface UiInvoice {
   id: string;
   number: string;
   customerId: string;
@@ -51,12 +269,10 @@ export interface Invoice {
   dueDate: string;
   total: number;
   paid: number;
-  status: InvoiceStatus;
+  status: string;
 }
 
-export type PaymentStatus = "recu" | "partiel" | "impute" | "anomalie";
-
-export interface Payment {
+export interface UiPayment {
   id: string;
   reference: string;
   customerId: string;
@@ -64,12 +280,10 @@ export interface Payment {
   date: string;
   amount: number;
   allocated: number;
-  status: PaymentStatus;
+  status: string;
 }
 
-export type ReceivableStatus = "en-cours" | "echue" | "urgente" | "reglee";
-
-export interface Receivable {
+export interface UiReceivable {
   id: string;
   customerId: string;
   accountNumber: string;
@@ -78,16 +292,14 @@ export interface Receivable {
   balance: number;
   ageDays: number;
   dueDate: string;
-  status: ReceivableStatus;
+  status: string;
 }
 
-export type ActionStatus = "planifiee" | "en-cours" | "cloturee";
-
-export interface CollectionAction {
+export interface UiCollectionAction {
   id: string;
   customerId: string;
   type: string;
-  status: ActionStatus;
+  status: string;
   owner: string;
   date: string;
   dueDate: string | null;
@@ -95,99 +307,52 @@ export interface CollectionAction {
   result: string | null;
 }
 
-export interface Manager {
-  id: string;
-  name: string;
-  role: string;
-  agency: string;
-  workload: number;
-}
-
-export interface Agency {
-  id: string;
-  name: string;
-  center: string;
-}
-
-export interface Center {
-  id: string;
-  name: string;
-}
-
-export interface ImportBatch {
+export interface UiImportBatch {
   id: string;
   fileName: string;
   type: string;
-  status: "succes" | "partiel" | "echec";
+  status: string;
   processed: number;
   rejected: number;
   date: string;
 }
 
-export interface ImportReject {
+export interface UiImportReject {
   row: number;
   column: string;
   value: string;
   reason: string;
 }
 
-export interface ImportResult {
-  batch: ImportBatch;
-  rejects: ImportReject[];
+export interface UiImportResult {
+  batch: UiImportBatch;
+  rejects: UiImportReject[];
 }
 
-export interface Session {
-  token: string;
-  user: { name: string; role: string; initials: string };
+export interface UiDashboardData {
+  kpis: {
+    encoursTotal: number;
+    echues: number;
+    tauxRecouvrement: number;
+    actionsEnRetard: number;
+  };
+  aging: AgingDatum[];
+  trend: Array<{ month: string; dette: number; encaissement: number }>;
+  priorities: UiPriorityItem[];
+  refreshedAt: string;
 }
 
-export interface DashboardKpis {
-  encoursTotal: number;
-  echues: number;
-  tauxRecouvrement: number;
-  actionsEnRetard: number;
-}
-
-export interface AgingBucket {
-  label: string;
-  amount: number;
-  percent: number;
-  tone: "primary" | "secondary" | "warning" | "error";
-}
-
-export interface TrendPoint {
-  month: string;
-  dette: number;
-  encaissement: number;
-}
-
-export interface DashboardPriority {
+export interface UiPriorityItem {
   id: string;
   name: string;
   overdue: number;
   lastActionDate: string;
-  status: CustomerStatus;
-}
-
-export interface CustomerDetail extends Customer {
-  accounts: Account[];
-  invoices: Invoice[];
-  payments: Payment[];
-  receivables: Receivable[];
-  actions: CollectionAction[];
-  manager: Manager | null;
-}
-
-export interface CustomerFilters {
-  query: string;
-  agency: string;
-  center: string;
   status: string;
 }
 
-export interface Paginated<T> {
-  items: T[];
-  total: number;
-  page: number;
-  pageSize: number;
+export interface AgingDatum {
+  label: string;
+  amount: number;
+  percent: number;
+  tone: "primary" | "secondary" | "warning" | "error";
 }

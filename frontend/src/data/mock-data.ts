@@ -4,38 +4,38 @@
  * lorsque le backend sera branché. Référence de fraîcheur : 31/07/2026 (lot « GBL - Juillet 2026 »).
  */
 import type {
-  Account,
-  Agency,
-  Center,
-  CollectionAction,
-  Customer,
-  CustomerDetail,
-  ImportBatch,
-  ImportReject,
-  Invoice,
-  Manager,
-  Payment,
-  Receivable,
+  UiAccount,
+  UiAgency,
+  UiCenter,
+  UiCollectionAction,
+  UiCustomer,
+  UiCustomerDetail,
+  UiImportBatch,
+  UiImportReject,
+  UiInvoice,
+  UiManager,
+  UiPayment,
+  UiReceivable,
 } from "@/api/types";
 
 const REF = Date.parse("2026-07-31T23:59:00");
 const iso = (daysAgo: number): string => new Date(REF - daysAgo * 86_400_000).toISOString();
 
-export const managers: Manager[] = [
+export const managers: UiManager[] = [
   { id: "mgr-1", name: "M. Essomba", role: "Département Recouvrement", agency: "Yaoundé Centre", workload: 118 },
   { id: "mgr-2", name: "C. Njoya", role: "Département Recouvrement", agency: "Douala Akwa", workload: 94 },
   { id: "mgr-3", name: "P. Kamga", role: "Recouvrement Entreprises", agency: "Bafoussam", workload: 61 },
   { id: "mgr-4", name: "A. Leroux", role: "Département Recouvrement", agency: "Yaoundé Centre", workload: 37 },
 ];
 
-export const centers: Center[] = [
+export const centers: UiCenter[] = [
   { id: "cg-entreprises", name: "CG Entreprises" },
   { id: "cg-pme", name: "CG PME" },
   { id: "cg-vip", name: "CG Particuliers VIP" },
   { id: "cg-etat", name: "CG État" },
 ];
 
-export const agencies: Agency[] = [
+export const agencies: UiAgency[] = [
   { id: "ag-yde", name: "Yaoundé Centre", center: "CG Entreprises" },
   { id: "ag-dla", name: "Douala Akwa", center: "CG PME" },
   { id: "ag-baf", name: "Bafoussam", center: "CG Entreprises" },
@@ -43,15 +43,15 @@ export const agencies: Agency[] = [
   { id: "ag-lim", name: "Limbé", center: "CG PME" },
 ];
 
-interface CustomerSpec {
-  customer: Omit<Customer, "lastPayment" | "overdue" | "balance">;
-  accounts: Array<{ number: string; status: Account["status"] }>;
+interface UiCustomerSpec {
+  customer: Omit<UiCustomer, "lastPayment" | "overdue" | "balance">;
+  accounts: Array<{ number: string; status: UiAccount["status"] }>;
   invoices: Array<{ number: string; issueDaysAgo: number; dueDaysAgo: number; total: number; paid: number }>;
   payments: Array<{ reference: string; daysAgo: number; amount: number }>;
-  actions: Array<{ type: string; status: CollectionAction["status"]; daysAgo: number; dueInDays: number | null; note: string; result: string | null }>;
+  actions: Array<{ type: string; status: UiCollectionAction["status"]; daysAgo: number; dueInDays: number | null; note: string; result: string | null }>;
 }
 
-const specs: CustomerSpec[] = [
+const specs: UiCustomerSpec[] = [
   {
     customer: {
       id: "CAM-23901-B",
@@ -428,9 +428,9 @@ const specs: CustomerSpec[] = [
   },
 ];
 
-function buildDetail(spec: CustomerSpec): CustomerDetail {
+function buildDetail(spec: UiCustomerSpec): UiCustomerDetail {
   const { customer } = spec;
-  const accounts: Account[] = spec.accounts.map((a, i) => ({
+  const accounts: UiAccount[] = spec.accounts.map((a, i) => ({
     id: `${customer.id}-ACC-${i + 1}`,
     customerId: customer.id,
     number: a.number,
@@ -441,8 +441,8 @@ function buildDetail(spec: CustomerSpec): CustomerDetail {
     balance: 0,
   }));
 
-  const invoices: Invoice[] = spec.invoices.map((f, i) => {
-    const status: Invoice["status"] = f.paid >= f.total ? "payee" : f.paid > 0 ? "partielle" : "impayee";
+  const invoices: UiInvoice[] = spec.invoices.map((f, i) => {
+    const status: UiInvoice["status"] = f.paid >= f.total ? "payee" : f.paid > 0 ? "partielle" : "impayee";
     return {
       id: `${f.number}-${i}`,
       number: f.number,
@@ -456,9 +456,9 @@ function buildDetail(spec: CustomerSpec): CustomerDetail {
     };
   });
 
-  const payments: Payment[] = spec.payments.map((p, i) => {
+  const payments: UiPayment[] = spec.payments.map((p, i) => {
     const allocated = p.amount;
-    const status: Payment["status"] = allocated >= p.amount ? "impute" : "partiel";
+    const status: UiPayment["status"] = allocated >= p.amount ? "impute" : "partiel";
     return {
       id: `${p.reference}-${i}`,
       reference: p.reference,
@@ -471,12 +471,12 @@ function buildDetail(spec: CustomerSpec): CustomerDetail {
     };
   });
 
-  const receivables: Receivable[] = invoices
+  const receivables: UiReceivable[] = invoices
     .filter((f) => f.paid < f.total)
     .map((f, i) => {
       const balance = f.total - f.paid;
       const ageDays = Math.max(0, Math.floor((REF - Date.parse(f.dueDate)) / 86_400_000));
-      const status: Receivable["status"] = ageDays > 90 ? "urgente" : ageDays > 0 ? "echue" : "en-cours";
+      const status: UiReceivable["status"] = ageDays > 90 ? "urgente" : ageDays > 0 ? "echue" : "en-cours";
       return {
         id: `${f.number}-REC-${i}`,
         customerId: customer.id,
@@ -490,7 +490,7 @@ function buildDetail(spec: CustomerSpec): CustomerDetail {
       };
     });
 
-  const actions: CollectionAction[] = spec.actions.map((a, i) => ({
+  const actions: UiCollectionAction[] = spec.actions.map((a, i) => ({
     id: `${customer.id}-ACT-${i + 1}`,
     customerId: customer.id,
     type: a.type,
@@ -520,16 +520,16 @@ function buildDetail(spec: CustomerSpec): CustomerDetail {
   };
 }
 
-export const customers: CustomerDetail[] = specs.map(buildDetail);
+export const customers: UiCustomerDetail[] = specs.map(buildDetail);
 
-export const importBatches: ImportBatch[] = [
+export const importBatches: UiImportBatch[] = [
   { id: "IMP-2026-0712", fileName: "Factures_Entreprises_Juin2026.xlsx", type: "Factures", status: "succes", processed: 14_520, rejected: 0, date: iso(5) },
   { id: "IMP-2026-0711", fileName: "Paiements_Semaine29.xlsx", type: "Paiements", status: "partiel", processed: 8_950, rejected: 12, date: iso(6) },
   { id: "IMP-2026-0708", fileName: "Clients_Nouveaux_MiseAJour.xlsx", type: "Clients", status: "succes", processed: 1_204, rejected: 0, date: iso(9) },
   { id: "IMP-2026-0705", fileName: "Créances_Rejets_Q2.xlsx", type: "Créances", status: "echec", processed: 0, rejected: 450, date: iso(12) },
 ];
 
-export const importRejects: ImportReject[] = [
+export const importRejects: UiImportReject[] = [
   { row: 1042, column: "NUMERO_FACTURE", value: "FAC-2026-0A41", reason: "Format invalide (alphanumérique attendu)" },
   { row: 1043, column: "MONTANT", value: "12,500.00 €", reason: "Devise non autorisée (XAF attendu)" },
   { row: 1089, column: "DATE_ECHEANCE", value: "31/02/2026", reason: "Date incohérente avec la date d'émission" },

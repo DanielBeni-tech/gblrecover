@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Eye, FilterX, Gavel, Plus, UserPlus } from "lucide-react";
+import { Download, FilterX, Plus, UserPlus, ArrowRight } from "lucide-react";
 import { createCustomer, searchCustomers } from "@/api/client";
 import { agencies, centers, managers } from "@/data/mock-data";
-import type { Customer, CustomerType } from "@/api/types";
+import type { CustomerType, UiCustomer } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -169,12 +169,17 @@ export function ClientsPage() {
           </div>
         ) : data && data.items.length === 0 ? (
           <EmptyState
-            title="Aucun client ne correspond à ces critères"
-            description="Vérifiez l'orthographe ou le format de votre recherche, ou réinitialisez les filtres."
+            title="Aucun client trouvé"
+            description="Modifiez votre recherche, ajustez les filtres ou créez un nouveau dossier client pour commencer."
             action={
-              <Button variant="outline" size="sm" onClick={reset}>
-                Réinitialiser la recherche
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button variant="outline" size="sm" onClick={reset}>
+                  Réinitialiser les filtres
+                </Button>
+                <Button size="sm" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> Nouveau dossier
+                </Button>
+              </div>
             }
           />
         ) : (
@@ -193,7 +198,7 @@ export function ClientsPage() {
                 </tr>
               </TableHeader>
               <TableBody>
-                {data?.items.map((c: Customer) => (
+                {data?.items.map((c: UiCustomer) => (
                   <TableRow key={c.id}>
                     <TableCell className="t-tabular text-primary-container">
                       <Link to={`/clients/${c.id}`} className="font-medium hover:underline">
@@ -209,30 +214,14 @@ export function ClientsPage() {
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(c.lastPayment)}</TableCell>
                     <TableCell className="text-on-surface-variant">{managers.find((m) => m.id === c.managerId)?.name ?? "—"}</TableCell>
                     <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <Link
-                          to={`/clients/${c.id}`}
-                          className="rounded p-1 text-outline hover:bg-surface-container-low hover:text-primary"
-                          title="Voir détails"
-                          aria-label={`Voir le détail de ${c.name}`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                        {c.overdue > 0 ? (
-                          <Link
-                            to={`/clients/${c.id}?tab=creances`}
-                            className="rounded p-1 text-outline hover:bg-surface-container-low hover:text-error"
-                            title="Action requise"
-                            aria-label={`Action requise pour ${c.name}`}
-                          >
-                            <Gavel className="h-4 w-4" />
-                          </Link>
-                        ) : (
-                          <span className="rounded p-1 text-surface-variant">
-                            <Gavel className="h-4 w-4" />
-                          </span>
-                        )}
-                      </div>
+                      <Link
+                        to={`/clients/${c.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-card border border-outline-variant bg-surface-container-low px-2.5 py-1.5 text-[13px] font-medium text-on-surface hover:border-primary hover:text-primary"
+                        title="Ouvrir le dossier et consulter les actions possibles"
+                        aria-label={`Ouvrir le dossier de ${c.name}`}
+                      >
+                        Ouvrir <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}
