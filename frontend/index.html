@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="GBLRecover — Plateforme de Revenue Assurance et de recouvrement de CAMTEL" />
+    <title>GBLRecover — Revenue Assurance</title>
+  </head>
+  <body>
+    <!--
+      GBLRecover frontend — direction contract.
+      THESIS: GBLRecover rend la dette client lisible et actionnable pour le Revenue Assurance de CAMTEL ;
+      il refuse la vitrine — densité analytique, montants tabulaires, action suivante toujours visible.
+      OWN-WORLD: héritage du monde maquette implémenté (tokens Material GBLRecover) — bleu profond #004085,
+      or #FFC107 réservé à l'accent, surfaces gris froid #f7f9fb, Inter + JetBrains Mono, cartes à bordure
+      fine, rayon 4px, tables denses à en-tête collant, sidebar 260px, grille 12 colonnes / 1440px.
+      STORY: l'agent retrouve un dossier en quelques secondes, comprend la composition de la dette,
+      enregistre l'action suivante et pilote son portefeuille.
+      FIRST VIEWPORT: après connexion — dashboard : titre display, 4 KPI (encours, échues, taux, actions en retard),
+      courbe dette vs encaissements, aging, table des dossiers prioritaires ; recherche globale dans la topbar.
+      FORM: vertical slice MVP du GBLContext §9.2 (login → dashboard → recherche → fiche client → factures/paiements
+      → import Excel + rapport), monde visuel hérité des maquettes, mode Operate.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

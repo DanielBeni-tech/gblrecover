@@ -1,0 +1,93 @@
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getPayments } from "@/api/client";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Input, Label } from "@/components/ui/input";
+import { Badge, paymentStatusLabel, paymentStatusTone } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { xaf, dateFr } from "@/lib/format";
+
+const PAGE_SIZE = 10;
+
+export function PaymentsPage() {
+  const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebounced(query);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const filters = useMemo(() => ({ query: debounced, page, pageSize: PAGE_SIZE }), [debounced, page]);
+
+  const { data, isLoading } = useQuery({ queryKey: ["payments", filters], queryFn: () => getPayments(filters) });
+
+  return (
+    <>
+      <PageHeader title="Paiements" subtitle="Vérifiez les encaissements reçus et leurs imputations." />
+      <Card className="p-4">
+        <div className="md:w-1/2">
+          <Label htmlFor="p-q">Recherche</Label>
+          <Input id="p-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Référence de paiement, ID client…" />
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-outline-variant bg-surface px-4 py-2.5">
+          <p className="text-[16px] font-semibold text-on-surface">
+            {(data?.total ?? 0).toLocaleString("fr-FR")} <span className="text-[14px] font-normal text-on-surface-variant">paiements</span>
+          </p>
+        </div>
+        {isLoading ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : data && data.items.length === 0 ? (
+          <EmptyState title="Aucun paiement trouvé" description="Modifiez votre recherche ou la période." />
+        ) : (
+          <div className="overflow-x-auto">
+            <Table className="min-w-[860px]">
+              <TableHeader>
+                <tr>
+                  <TableHead>Référence</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Compte</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Montant</TableHead>
+                  <TableHead className="text-right">Imputé</TableHead>
+                  <TableHead>Statut</TableHead>
+                </tr>
+              </TableHeader>
+              <TableBody>
+                {data?.items.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="t-tabular text-primary-container">{p.reference}</TableCell>
+                    <TableCell className="max-w-[200px] truncate font-medium">{p.customerId}</TableCell>
+                    <TableCell className="t-tabular text-on-surface-variant">{p.accountNumber}</TableCell>
+                    <TableCell className="t-tabular text-on-surface-variant">{dateFr(p.date)}</TableCell>
+                    <TableCell className="t-tabular text-right">{xaf(p.amount)}</TableCell>
+                    <TableCell className="t-tabular text-right text-success">{xaf(p.allocated)}</TableCell>
+                    <TableCell>
+                      <Badge tone={paymentStatusTone[p.status]}>{paymentStatusLabel[p.status]}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        {data && data.total > 0 && <Pagination page={page} pageSize={PAGE_SIZE} total={data.total} onChange={setPage} />}
+      </Card>
+    </>
+  );
+}

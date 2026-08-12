@@ -1,0 +1,155 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Activity, CheckCircle2, Eye, EyeOff, Lock, ShieldCheck, User } from "lucide-react";
+import { login } from "@/api/client";
+import { demoCredentials } from "@/data/mock-data";
+import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
+
+const bullets = [
+  "Vue client 360° — comptes, factures, paiements, créances",
+  "Recherche globale et priorisation des dossiers",
+  "Import Excel contrôlé avec rapport de rejets",
+  "Habilitations par rôle et périmètre, traçabilité",
+];
+
+export function LoginPage() {
+  const navigate = useNavigate();
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const session = await login(identifier, password);
+      localStorage.setItem("gbl-session", JSON.stringify(session));
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur de connexion.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex h-full">
+      {/* Panneau de marque */}
+      <div className="hidden w-[44%] flex-col justify-between bg-primary p-10 text-on-primary lg:flex">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-container">
+            <Activity className="h-6 w-6 text-on-primary-container" />
+          </div>
+          <div>
+            <p className="text-[20px] font-bold leading-6">GBLRecover</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-on-primary-container">Revenue Assurance</p>
+          </div>
+        </div>
+        <div className="max-w-md">
+          <h1 className="text-[36px] font-bold leading-[44px] tracking-[-0.02em]">
+            Voir juste.
+            <br />
+            Comprendre vite.
+            <br />
+            Agir avec confiance.
+          </h1>
+          <p className="mt-4 text-[15px] text-on-primary-container">
+            La source de vérité opérationnelle de CAMTEL pour piloter la dette client et le recouvrement.
+          </p>
+          <ul className="mt-8 space-y-3">
+            {bullets.map((b) => (
+              <li key={b} className="flex items-start gap-2.5 text-[14px]">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-secondary-container" />
+                {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="text-[12px] text-on-primary-container">© 2026 CAMTEL — Accès réservé aux équipes autorisées</p>
+      </div>
+
+      {/* Formulaire */}
+      <div className="flex flex-1 items-center justify-center bg-surface p-6">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 lg:hidden">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-primary">
+              <Activity className="h-6 w-6 text-on-primary" />
+            </div>
+            <h1 className="text-[24px] font-semibold text-on-surface">GBLRecover</h1>
+            <p className="text-[13px] text-on-surface-variant">Plateforme de Revenue Assurance — CAMTEL</p>
+          </div>
+          <h2 className="text-[24px] font-semibold tracking-[-0.01em] text-on-surface">Connexion</h2>
+          <p className="mt-1 text-[14px] text-on-surface-variant">Accédez à votre espace de recouvrement.</p>
+
+          <form onSubmit={submit} className="mt-7 space-y-4" noValidate>
+            <div>
+              <Label htmlFor="identifier">Identifiant ou e-mail</Label>
+              <div className="relative">
+                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
+                <Input
+                  id="identifier"
+                  type="text"
+                  autoComplete="username"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="agent@camtel.cm"
+                  className="pl-9"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="password">Mot de passe</Label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
+                <Input
+                  id="password"
+                  type={show ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="pl-9 pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow((s) => !s)}
+                  aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                >
+                  {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <p role="alert" className="rounded-card border border-error/30 bg-error-container px-3 py-2.5 text-[13px] text-on-error-container">
+                {error}
+              </p>
+            )}
+
+            <Button type="submit" disabled={loading || !identifier || !password} className="w-full" size="lg">
+              {loading ? "Connexion…" : "Se connecter"}
+            </Button>
+          </form>
+
+          <div className="mt-6 rounded-card border border-outline-variant bg-surface-container-low p-3.5">
+            <p className="t-label mb-1.5 text-on-surface-variant">Compte de démonstration</p>
+            <p className="t-tabular text-[13px] text-on-surface">
+              {demoCredentials.identifier} · {demoCredentials.password}
+            </p>
+          </div>
+          <p className="mt-5 flex items-center gap-1.5 text-[12px] text-on-surface-variant">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Session sécurisée — données de démonstration anonymisées.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
