@@ -20,13 +20,15 @@ SELECT
     SUM(COALESCE(f.MONTANT_FACTURE, 0)) AS total_facture_mois,
     
     -- KPI 4 : Impayés du mois
-    SUM(COALESCE(f.MONTANT_IMPAYE, 0)) AS total_impaye_mois
+    SUM(COALESCE(f.OUTSTANDING_AMOUNT, 0)) AS total_impaye_mois
 
 FROM COMPTE cp
 JOIN CLIENT cl ON cp.CODE_CLIENT = cl.CODE_CLIENT
 JOIN AGENCE a ON cp.ID_AGENCE = a.ID_AGENCE
 JOIN CENTRE c ON a.NOM_CENTRE = c.NOM_CENTRE
-LEFT JOIN FACTURE f ON cp.NUM_COMPTE = f.NUM_COMPTE
+LEFT JOIN FACTURE f ON cp.NUM_COMPTE = f.NUM_COMPTE AND (f.STATUS <> 'CANCELLED' OR f.STATUS IS NULL)
+
+WHERE f.STATUS <> 'CANCELLED' OR f.STATUS IS NULL
 
 GROUP BY 
     c.NOM_CENTRE,
@@ -56,7 +58,7 @@ DROP VIEW IF EXISTS vw_impayes_critiques CASCADE;
 
 CREATE OR REPLACE VIEW vw_impayes_critiques AS
 WITH max_ref AS (
-    SELECT COALESCE(MAX(DATE_EMISSION), CURRENT_DATE) AS max_date FROM FACTURE
+    SELECT COALESCE(MAX(DATE_EMISSION), CURRENT_DATE) AS max_date FROM FACTURE WHERE STATUS <> 'CANCELLED'
 )
 SELECT 
     cp.NUM_COMPTE,
@@ -66,7 +68,7 @@ SELECT
     a.NOM_AGENCE,
     cp.BALANCE AS balance_compte,
     
-    SUM(COALESCE(f.MONTANT_IMPAYE, 0)) AS total_montant_impaye,
+    SUM(COALESCE(f.OUTSTANDING_AMOUNT, 0)) AS total_montant_impaye,
     SUM(COALESCE(f.MONTANT_FACTURE, 0)) AS total_montant_facture,
     
     (EXTRACT(YEAR FROM AGE((SELECT max_date FROM max_ref), MIN(f.DATE_EMISSION))) * 12) +
@@ -78,7 +80,8 @@ FROM COMPTE cp
 JOIN CLIENT cl ON cp.CODE_CLIENT = cl.CODE_CLIENT
 JOIN AGENCE a ON cp.ID_AGENCE = a.ID_AGENCE
 JOIN CENTRE c ON a.NOM_CENTRE = c.NOM_CENTRE
-JOIN FACTURE f ON cp.NUM_COMPTE = f.NUM_COMPTE
+JOIN FACTURE f ON cp.NUM_COMPTE = f.NUM_COMPTE AND f.STATUS <> 'CANCELLED'
+WHERE f.STATUS <> 'CANCELLED'
 
 GROUP BY 
     cp.NUM_COMPTE,
@@ -122,13 +125,13 @@ SELECT
     
     -- Indicateurs financiers
     SUM(COALESCE(f.MONTANT_FACTURE, 0)) AS total_facture,
-    SUM(COALESCE(f.MONTANT_IMPAYE, 0)) AS total_impaye,
-    SUM(COALESCE(f.MONTANT_FACTURE, 0)) - SUM(COALESCE(f.MONTANT_IMPAYE, 0)) AS total_recouvre,
+    SUM(COALESCE(f.OUTSTANDING_AMOUNT, 0)) AS total_impaye,
+    SUM(COALESCE(f.MONTANT_FACTURE, 0)) - SUM(COALESCE(f.OUTSTANDING_AMOUNT, 0)) AS total_recouvre,
     
     -- Taux de recouvrement du gestionnaire en %
     ROUND(
         (
-            (SUM(COALESCE(f.MONTANT_FACTURE, 0)) - SUM(COALESCE(f.MONTANT_IMPAYE, 0))) 
+            (SUM(COALESCE(f.MONTANT_FACTURE, 0)) - SUM(COALESCE(f.OUTSTANDING_AMOUNT, 0))) 
             / NULLIF(SUM(COALESCE(f.MONTANT_FACTURE, 0)), 0)::numeric
         ) * 100, 2
     ) AS taux_recouvrement_pct
@@ -137,7 +140,8 @@ FROM GESTIONNAIRE g
 JOIN COMPTE cp ON g.MAT_GESTIONNAIRE = cp.MAT_GESTIONNAIRE
 JOIN AGENCE a ON cp.ID_AGENCE = a.ID_AGENCE
 JOIN CENTRE c ON a.NOM_CENTRE = c.NOM_CENTRE
-JOIN FACTURE f ON cp.NUM_COMPTE = f.NUM_COMPTE
+JOIN FACTURE f ON cp.NUM_COMPTE = f.NUM_COMPTE AND f.STATUS <> 'CANCELLED'
+WHERE f.STATUS <> 'CANCELLED'
 
 GROUP BY 
     g.MAT_GESTIONNAIRE,
@@ -279,7 +283,7 @@ FROM CLIENT cl
 JOIN COMPTE cp ON cl.CODE_CLIENT = cp.CODE_CLIENT
 JOIN AGENCE a ON cp.ID_AGENCE = a.ID_AGENCE
 JOIN CENTRE c ON a.NOM_CENTRE = c.NOM_CENTRE
-LEFT JOIN FACTURE f ON cp.NUM_COMPTE = f.NUM_COMPTE
+LEFT JOIN FACTURE f ON cp.NUM_COMPTE = f.NUM_COMPTE AND (f.STATUS <> 'CANCELLED' OR f.STATUS IS NULL)
 
 GROUP BY 
     c.NOM_CENTRE,
@@ -351,7 +355,7 @@ SELECT
 FROM client cl
 JOIN compte cp ON cl.code_client = cp.code_client
 LEFT JOIN stats_clients sc ON cl.code_client = sc.code_client AND cl.marche = sc.marche
-LEFT JOIN facture f ON cp.num_compte = f.num_compte
+LEFT JOIN facture f ON cp.num_compte = f.num_compte AND (f.status <> 'CANCELLED' OR f.status IS NULL)
 
 GROUP BY COALESCE(cl.marche, 'NON SPECIFIE');
 
@@ -384,7 +388,7 @@ WITH stats_factures_agence AS (
         SUM(CASE WHEN f.type_flux = 'FACTURE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_facture_fcfa,
         SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_impaye_flux_fcfa
     FROM compte cp
-    JOIN facture f ON cp.num_compte = f.num_compte
+    JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
     GROUP BY cp.id_agence
 ),
 stats_gestionnaires AS (
@@ -497,7 +501,7 @@ WITH stats_factures_gest AS (
         SUM(CASE WHEN f.type_flux = 'FACTURE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_facture_fcfa,
         SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_impaye_flux_fcfa
     FROM compte cp
-    JOIN facture f ON cp.num_compte = f.num_compte
+    JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
     WHERE cp.mat_gestionnaire IS NOT NULL AND TRIM(cp.mat_gestionnaire) <> ''
     GROUP BY cp.mat_gestionnaire
 )
@@ -614,7 +618,7 @@ WITH stats_factures_gest AS (
         SUM(CASE WHEN f.type_flux = 'FACTURE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_facture_fcfa,
         SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_impaye_flux_fcfa
     FROM compte cp
-    JOIN facture f ON cp.num_compte = f.num_compte
+    JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
     WHERE cp.mat_gestionnaire IS NOT NULL AND TRIM(cp.mat_gestionnaire) <> ''
     GROUP BY cp.mat_gestionnaire
 )
@@ -895,7 +899,7 @@ WITH premiere_facture AS (
         cp.code_client,
         DATE_TRUNC('month', MIN(f.date_emission)) AS cohorte_mois
     FROM compte cp
-    JOIN facture f ON cp.num_compte = f.num_compte
+    JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
     GROUP BY cp.code_client
 )
 SELECT 
@@ -911,7 +915,7 @@ SELECT
     ) AS taux_impaye_cohorte_pct
 FROM premiere_facture pf
 JOIN compte cp ON pf.code_client = cp.code_client
-JOIN facture f ON cp.num_compte = f.num_compte
+JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
 GROUP BY pf.cohorte_mois
 ORDER BY pf.cohorte_mois ASC;
 
@@ -931,7 +935,7 @@ SELECT
     SUM(CASE WHEN (CURRENT_DATE - f.date_emission) > 90 THEN f.montant_facture ELSE 0 END) AS tranche_plus_90_j,
     SUM(f.montant_facture) AS total_impaye_cumule_fcfa
 FROM compte cp
-JOIN facture f ON cp.num_compte = f.num_compte
+JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
 WHERE f.type_flux = 'IMPAYE'
 GROUP BY cp.code_client, cp.num_compte;
 
@@ -1216,7 +1220,7 @@ SELECT
     f.libelle_periode,
     f.montant_facture
 FROM compte cp
-JOIN facture f ON cp.num_compte = f.num_compte
+JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
 WHERE (UPPER(cp.statut_facturation) LIKE '%ARRÊT%' OR UPPER(cp.statut_facturation) LIKE '%ARRET%')
   AND f.type_flux = 'FACTURE'
   AND f.montant_facture > 0;
@@ -1238,7 +1242,7 @@ SELECT
         )::numeric, 2
     ) AS taux_impaye_pct
 FROM compte cp
-LEFT JOIN facture f ON cp.num_compte = f.num_compte
+LEFT JOIN facture f ON cp.num_compte = f.num_compte AND (f.status <> 'CANCELLED' OR f.status IS NULL)
 GROUP BY cp.e_bill;
 
 
@@ -1359,7 +1363,7 @@ WITH impayes_clients AS (
         SUM(f.montant_facture) AS total_impaye_client
     FROM compte cp
     JOIN client cl ON cp.code_client = cl.code_client
-    JOIN facture f ON cp.num_compte = f.num_compte
+    JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
     WHERE f.type_flux = 'IMPAYE'
     GROUP BY cp.code_client, cl.raison_sociale
 ),
@@ -1437,7 +1441,7 @@ SELECT
 FROM gestionnaire g
 JOIN compte cp ON g.mat_gestionnaire = cp.mat_gestionnaire
 JOIN client cl ON cp.code_client = cl.code_client
-LEFT JOIN facture f ON cp.num_compte = f.num_compte
+LEFT JOIN facture f ON cp.num_compte = f.num_compte AND (f.status <> 'CANCELLED' OR f.status IS NULL)
 GROUP BY g.mat_gestionnaire, g.nom_gestionnaire, cl.marche
 ORDER BY total_impaye_fcfa DESC;
 
@@ -1595,7 +1599,7 @@ SELECT
         )::numeric, 2
     ) AS taux_impaye_pct
 FROM compte cp
-LEFT JOIN facture f ON cp.num_compte = f.num_compte
+LEFT JOIN facture f ON cp.num_compte = f.num_compte AND (f.status <> 'CANCELLED' OR f.status IS NULL)
 GROUP BY cp.statut_facturation
 ORDER BY total_impaye_fcfa DESC;
 
@@ -1616,7 +1620,7 @@ SELECT
         )::numeric, 2
     ) AS taux_impaye_pct
 FROM compte cp
-LEFT JOIN facture f ON cp.num_compte = f.num_compte
+LEFT JOIN facture f ON cp.num_compte = f.num_compte AND (f.status <> 'CANCELLED' OR f.status IS NULL)
 GROUP BY cp.statut_facturation
 ORDER BY total_facture_fcfa DESC;
 
@@ -1643,6 +1647,7 @@ SELECT
         )::numeric, 2
     ) AS taux_recouvrement_effectif_pct
 FROM facture
+WHERE status <> 'CANCELLED'
 GROUP BY DATE_TRUNC('month', date_emission)
 ORDER BY mois ASC;
 
@@ -1824,12 +1829,12 @@ SELECT
     cl.marche,
     cp.num_compte,
     f.id_facture,
-    f.montant_facture AS montant_impaye,
+    f.outstanding_amount AS montant_impaye,
     f.date_emission,
     (CURRENT_DATE - f.date_emission) AS retard_jours
 FROM client cl
 JOIN compte cp ON cl.code_client = cp.code_client
-JOIN facture f ON cp.num_compte = f.num_compte
+JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
 WHERE UPPER(cl.marche) LIKE '%OFF%'
   AND f.type_flux = 'IMPAYE'
   AND (CURRENT_DATE - f.date_emission) > 90;
