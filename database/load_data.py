@@ -1,0 +1,491 @@
+"""
+LOAD_DATA - Import complet depuis un fichier Excel unique
+Correspond EXACTEMENT au schéma schema.sql
+Version: 2.0 - Vérifié et corrigé
+"""
+
+import pandas as pd
+import re
+import hashlib
+from datetime import datetime
+from sqlalchemy import create_engine, text
+from uuid import uuid4
+import subprocess
+
+# ============================================================
+# 1. CONNEXION À POSTGRESQL
+# ============================================================
+
+import os
+
+USER = os.getenv("POSTGRES_USER", "postgres")
+PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+HOST = os.getenv("POSTGRES_HOST", "localhost")
+PORT = os.getenv("POSTGRES_PORT", "5433")
+DB_NAME = os.getenv("POSTGRES_DB", "gblrecover")
+
+engine = create_engine(f"postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}")
+BATCH_ID = str(uuid4())
+
+CLEAN_DB = os.getenv('CLEAN_DB', 'true').lower() in ('1', 'true', 'yes')
+
+if CLEAN_DB:
+    schema_path = os.path.join(os.path.dirname(__file__), 'schema.sql')
+    if os.path.exists(schema_path):
+        print("🧹 Nettoyage de la base de données (DROP SCHEMA public CASCADE)")
+        env = os.environ.copy()
+        env['PGPASSWORD'] = PASSWORD
+        try:
+            subprocess.run([
+                'psql', '-h', HOST, '-p', PORT, '-U', USER, '-d', DB_NAME,
+                '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+            ], check=True, env=env)
+            print(f"📦 Application du schéma depuis {schema_path}")
+            subprocess.run([
+                'psql', '-h', HOST, '-p', PORT, '-U', USER, '-d', DB_NAME,
+                '-f', schema_path
+            ], check=True, env=env)
+        except subprocess.CalledProcessError as e:
+            print("Erreur lors de l'initialisation du schéma :", e)
+            raise
+    else:
+        print(f"Aucun fichier de schéma trouvé à {schema_path}, saut du nettoyage.")
+
+print("🚀 Démarrage de l'import GBLRecover")
+print(f"📁 Fichier: GBL - Juillet 2026.xlsx")
+print(f"🔑 Batch ID: {BATCH_ID}")
+print("-" * 60)
+
+# ============================================================
+# 2. CHARGEMENT DU FICHIER EXCEL
+# ============================================================
+
+file_path = "GBL - Juillet 2026.xlsx"
+df = pd.read_excel(file_path)
+
+print(f"📊 Fichier chargé: {len(df)} lignes")
+print(f"📋 Colonnes disponibles: {list(df.columns)}")
+
+# Normalisation des noms de colonnes
+df.columns = df.columns.str.strip()
+
+# Mapping des colonnes du fichier Excel vers les colonnes de la BD
+COLUMN_MAPPING = {
+    'Code client': 'code_client',
+    'Raison sociale': 'raison_sociale',
+    'Marché': 'marche',
+    'Email': 'email',
+    'Contact': 'tel',
+    'Compte': 'num_compte',
+    'Mat. Gestionnaire': 'mat_gestionnaire',
+    'Gestionnaire': 'nom_gestionnaire',
+    'Agence': 'nom_agence',
+    'Centre gestion': 'nom_centre',
+    'E-Bill': 'e_bill',
+    'Facturation': 'statut_facturation',
+    'Identification': 'identification',
+    'Balance': 'balance'
+}
+
+# Renommer les colonnes
+df.rename(columns=COLUMN_MAPPING, inplace=True)
+
+# ============================================================
+# 3. FONCTIONS DE NETTOYAGE
+# ============================================================
+
+def clean_string(value, max_length=None):
+    """Nettoie une chaîne de caractères"""
+    if pd.isna(value) or value is None:
+        return None
+    result = str(value).strip()
+    if max_length and len(result) > max_length:
+        result = result[:max_length]
+    return result if result else None
+
+def clean_identification(value):
+    """Nettoie et standardise l'identification"""
+    if pd.isna(value):
+        return 'Non identifié'
+    val_str = str(value).strip()
+    val_lower = val_str.lower()
+    
+    if val_lower.startswith('identifi') and 'non' not in val_lower:
+        return 'Identifié'
+    if 'en cours' in val_lower:
+        return 'En cours de vérification'
+    if 'non' in val_lower:
+        return 'Non identifié'
+    return clean_string(value, max_length=128)
+
+def clean_phone(value):
+    """Nettoie un numéro de téléphone (int8)"""
+    if pd.isna(value) or value is None:
+        return None
+    phone_str = str(value).strip()
+    digits = re.sub(r'\D', '', phone_str)
+    if len(digits) >= 8:
+        return int(digits)
+    return None
+
+def clean_balance(value):
+    """Nettoie le balance (float4)"""
+    if pd.isna(value) or value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return 0.0
+
+def clean_amount(value):
+    """Nettoie un montant (numeric(14,2))"""
+    if pd.isna(value) or value is None:
+        return 0.0
+    try:
+        return round(float(value), 2)
+    except (ValueError, TypeError):
+        return 0.0
+
+def clean_marche(value):
+    """Nettoie le marché (char(50))"""
+    if pd.isna(value) or value is None:
+        return 'NON SPECIFIE'
+    val = str(value).strip().upper()
+    if val in ['OFF', 'PAR', 'PRO']:
+        return val
+    return 'AUTRE'
+
+def detect_type_flux(libelle):
+    """Détecte le type de flux"""
+    if pd.isna(libelle):
+        return 'FACTURE'
+    lib = str(libelle).lower()
+    if 'impaye' in lib or 'impayé' in lib:
+        return 'IMPAYE'
+    return 'FACTURE'
+
+def extract_date_from_libelle(libelle):
+    """Extrait une date à partir du libellé de période"""
+    lib = str(libelle).lower()
+    
+    mois_map = {
+        'janvier': '01', 'février': '02', 'fevrier': '02', 'mars': '03',
+        'avril': '04', 'mai': '05', 'juin': '06', 'juillet': '07',
+        'août': '08', 'aout': '08', 'septembre': '09', 'octobre': '10',
+        'novembre': '11', 'décembre': '12', 'decembre': '12'
+    }
+    
+    # Rechercher l'année
+    annee_match = re.search(r'20\d{2}', lib)
+    annee = annee_match.group(0) if annee_match else '2026'
+    
+    # Rechercher le mois
+    mois = '01'
+    for m_nom, m_num in mois_map.items():
+        if m_nom in lib:
+            mois = m_num
+            break
+    
+    return f"{annee}-{mois}-01"
+
+# ============================================================
+# 4. NETTOYAGE DES DONNÉES
+# ============================================================
+
+print("\n🧹 Nettoyage des données...")
+
+# Nettoyage des champs textes
+df['code_client'] = df['code_client'].apply(lambda x: int(x) if pd.notna(x) else None)
+df['num_compte'] = df['num_compte'].apply(lambda x: int(x) if pd.notna(x) else None)
+df['raison_sociale'] = df['raison_sociale'].apply(lambda x: clean_string(x, max_length=128))
+df['marche'] = df['marche'].apply(clean_marche)
+df['email'] = df['email'].apply(lambda x: clean_string(x, max_length=128))
+df['tel'] = df['tel'].apply(clean_phone)
+df['mat_gestionnaire'] = df['mat_gestionnaire'].apply(lambda x: clean_string(x, max_length=128))
+df['nom_gestionnaire'] = df['nom_gestionnaire'].apply(lambda x: clean_string(x, max_length=128))
+df['nom_agence'] = df['nom_agence'].apply(lambda x: clean_string(x, max_length=128))
+df['nom_centre'] = df['nom_centre'].apply(lambda x: clean_string(x, max_length=128) or 'NON SPECIFIE')
+df['e_bill'] = df['e_bill'].apply(lambda x: clean_string(x, max_length=50))
+df['statut_facturation'] = df['statut_facturation'].apply(lambda x: clean_string(x, max_length=50))
+df['identification'] = df['identification'].apply(clean_identification)
+df['balance'] = df['balance'].apply(clean_balance)
+
+# Création de l'ID d'agence (varchar(128))
+df['id_agence'] = 'AG_' + df['nom_agence'].astype(str)
+
+print("✅ Nettoyage terminé")
+
+# ============================================================
+# 5. IMPORTATION DES TABLES (ORDRE LOGIQUE)
+# ============================================================
+
+print("\n📥 Importation des données dans PostgreSQL...")
+print("⚠️  Ordre d'import respectant les contraintes de clés étrangères")
+
+# ------------------------------------------------------------
+# 5.1 TABLE CENTRE (PK: nom_centre)
+# ------------------------------------------------------------
+print("  → Table CENTRE...")
+centres = df[['nom_centre']].drop_duplicates().dropna()
+centres = centres[centres['nom_centre'] != '']
+centres.to_sql('centre', engine, if_exists='append', index=False)
+print(f"    ✅ {len(centres)} centres importés")
+
+# ------------------------------------------------------------
+# 5.2 TABLE AGENCE (PK: id_agence, FK: nom_centre)
+# ------------------------------------------------------------
+print("  → Table AGENCE...")
+agences = df[['nom_agence', 'nom_centre']].dropna(subset=['nom_agence']).drop_duplicates()
+agences['id_agence'] = 'AG_' + agences['nom_agence'].astype(str)
+agences = agences.drop_duplicates(subset=['id_agence'])
+# Filtrer les agences dont le centre existe
+agences = agences[agences['nom_centre'].isin(centres['nom_centre'])]
+agences.to_sql('agence', engine, if_exists='append', index=False)
+print(f"    ✅ {len(agences)} agences importées")
+
+# ------------------------------------------------------------
+# 5.3 TABLE GESTIONNAIRE (PK: mat_gestionnaire)
+# ------------------------------------------------------------
+print("  → Table GESTIONNAIRE...")
+gestionnaires = df[['mat_gestionnaire', 'nom_gestionnaire']].dropna(subset=['mat_gestionnaire']).copy()
+gestionnaires['mat_gestionnaire'] = gestionnaires['mat_gestionnaire'].astype(str)
+gestionnaires = gestionnaires.drop_duplicates(subset=['mat_gestionnaire'])
+gestionnaires.to_sql('gestionnaire', engine, if_exists='append', index=False)
+print(f"    ✅ {len(gestionnaires)} gestionnaires importés")
+
+# ------------------------------------------------------------
+# 5.4 TABLE CLIENT (PK: code_client)
+# ------------------------------------------------------------
+print("  → Table CLIENT...")
+clients = df[['code_client', 'raison_sociale', 'marche', 'email', 'tel']].dropna(subset=['code_client']).copy()
+clients['code_client'] = clients['code_client'].astype(int)
+clients = clients.drop_duplicates(subset=['code_client'])
+clients.to_sql('client', engine, if_exists='append', index=False, chunksize=2000)
+print(f"    ✅ {len(clients)} clients importés")
+
+# ------------------------------------------------------------
+# 5.5 TABLE COMPTE (PK: num_compte, FK: mat_gestionnaire, id_agence, code_client)
+# ------------------------------------------------------------
+print("  → Table COMPTE...")
+comptes = df[['num_compte', 'mat_gestionnaire', 'id_agence', 'code_client', 
+              'e_bill', 'statut_facturation', 'identification', 'balance']].copy()
+
+# Nettoyage et conversion
+comptes = comptes.dropna(subset=['num_compte', 'code_client', 'id_agence'])
+comptes['num_compte'] = comptes['num_compte'].astype(int)
+comptes['code_client'] = comptes['code_client'].astype(int)
+comptes['mat_gestionnaire'] = comptes['mat_gestionnaire'].astype(str)
+
+# Filtrage pour intégrité référentielle
+comptes = comptes[comptes['id_agence'].isin(agences['id_agence'])]
+comptes = comptes[comptes['mat_gestionnaire'].isin(gestionnaires['mat_gestionnaire'])]
+comptes = comptes[comptes['code_client'].isin(clients['code_client'])]
+
+comptes = comptes.drop_duplicates(subset=['num_compte'])
+comptes.to_sql('compte', engine, if_exists='append', index=False, chunksize=2000)
+print(f"    ✅ {len(comptes)} comptes importés")
+
+# ------------------------------------------------------------
+# 5.6 TABLE SERVICE (Données de référence - PK: type_service)
+# ------------------------------------------------------------
+print("  → Table SERVICE (référentiel)...")
+services = pd.DataFrame([
+    {'type_service': 'LS', 'libelle_service': 'Ligne Spécialisée'},
+    {'type_service': 'Vobb', 'libelle_service': 'Voice over Broadband'},
+    {'type_service': 'FTTx', 'libelle_service': 'Fibre Optique'},
+    {'type_service': 'TV', 'libelle_service': 'Télévision'},
+    {'type_service': 'ADSL', 'libelle_service': 'Haut Débit ADSL'},
+    {'type_service': 'Mobile', 'libelle_service': 'Réseau Mobile'},
+    {'type_service': 'Autres', 'libelle_service': 'Autres Services'}
+])
+try:
+    existing = pd.read_sql("SELECT type_service FROM service", engine)
+    existing_types = set(existing['type_service'].astype(str).tolist())
+except Exception:
+    existing_types = set()
+
+to_insert = services[~services['type_service'].isin(existing_types)]
+if not to_insert.empty:
+    to_insert.to_sql('service', engine, if_exists='append', index=False)
+print(f"    ✅ {len(to_insert)} services importés (skipped {len(services) - len(to_insert)} existing)")
+
+# ------------------------------------------------------------
+# 5.7 TABLE FACTURE (PK: id_facture, FK: num_compte)
+# ------------------------------------------------------------
+print("  → Table FACTURE...")
+
+# Détection automatique des colonnes de factures/impayés
+colonnes_mois = [col for col in df.columns if re.search(r'(Facture|Impayé|Impayes|Décembre|Janvier|Février)', 
+                                                         str(col), re.IGNORECASE)]
+
+if colonnes_mois:
+    print(f"    📋 {len(colonnes_mois)} colonnes mensuelles détectées")
+    
+    # Transformation verticale (melt)
+    df_long = pd.melt(
+        df, 
+        id_vars=['num_compte'], 
+        value_vars=colonnes_mois,
+        var_name='libelle_periode', 
+        value_name='montant_facture'
+    )
+    
+    # Nettoyage des montants
+    df_long['montant_facture'] = df_long['montant_facture'].apply(clean_amount)
+    df_long = df_long[df_long['montant_facture'] != 0]
+    
+    # Détection du type de flux
+    df_long['type_flux'] = df_long['libelle_periode'].apply(detect_type_flux)
+    
+    # Extraction de la date
+    df_long['date_emission'] = df_long['libelle_periode'].apply(extract_date_from_libelle)
+    
+    # Génération des IDs uniques (varchar(128))
+    df_long['num_compte'] = df_long['num_compte'].astype(str)
+    df_long['id_facture'] = 'FAC_' + df_long['num_compte'] + '_' + df_long['libelle_periode'].str.replace(' ', '_').replace('/', '_')
+    df_long['id_facture'] = df_long['id_facture'].str.slice(0, 128)
+    
+    # Calcul des montants
+    df_long['paid_amount'] = 0.0
+    df_long['outstanding_amount'] = df_long['montant_facture']
+    df_long['status'] = 'OPEN'
+    
+    factures = df_long[['id_facture', 'num_compte', 'date_emission', 'montant_facture', 
+                        'paid_amount', 'outstanding_amount', 'status', 'type_flux', 'libelle_periode']].drop_duplicates(subset=['id_facture'])
+    
+    # Filtrage pour intégrité référentielle
+    factures['num_compte'] = factures['num_compte'].astype(int)
+    comptes_valides = comptes['num_compte'].unique()
+    factures = factures[factures['num_compte'].isin(comptes_valides)]
+    
+    # Import en deux étapes (car to_sql ne gère pas ON CONFLICT)
+    factures.to_sql('temp_facture_import', engine, if_exists='replace', index=False)
+    
+    upsert_query = """
+    INSERT INTO facture (id_facture, num_compte, date_emission, montant_facture,
+                         paid_amount, outstanding_amount, status, type_flux, libelle_periode)
+    SELECT 
+        id_facture, 
+        CAST(num_compte AS BIGINT), 
+        CAST(date_emission AS DATE), 
+        montant_facture, 
+        paid_amount, 
+        outstanding_amount, 
+        status, 
+        type_flux, 
+        libelle_periode
+    FROM temp_facture_import
+    ON CONFLICT (id_facture) 
+    DO UPDATE SET 
+        montant_facture = EXCLUDED.montant_facture,
+        paid_amount = EXCLUDED.paid_amount,
+        outstanding_amount = EXCLUDED.outstanding_amount,
+        status = EXCLUDED.status,
+        type_flux = EXCLUDED.type_flux,
+        date_emission = EXCLUDED.date_emission,
+        libelle_periode = EXCLUDED.libelle_periode;
+    
+    DROP TABLE temp_facture_import;
+    """
+    
+    with engine.begin() as conn:
+        conn.execute(text(upsert_query))
+    
+    print(f"    ✅ {len(factures)} factures importées")
+else:
+    print("    ⚠️ Aucune colonne mensuelle détectée")
+
+# ------------------------------------------------------------
+# 5.8 TABLE SOUSCRIRE (Si disponible - PK composite)
+# ------------------------------------------------------------
+print("  → Table SOUSCRIRE (si données disponibles)...")
+# Note: Les souscriptions ne sont pas dans le fichier source principal
+# Elles seraient importées depuis un fichier séparé si nécessaire
+
+# ------------------------------------------------------------
+# 5.9 TABLE PAIEMENT (Si disponible - PK: id_paiement)
+# ------------------------------------------------------------
+print("  → Table PAIEMENT (si données disponibles)...")
+# Note: Les paiements ne sont pas dans le fichier source principal
+
+# ============================================================
+# 6. CRÉATION D'UN BATCH D'IMPORT
+# ============================================================
+
+print("\n📝 Enregistrement du batch d'import...")
+# Ensure a system user exists and use its UUID as created_by
+system_email = 'system@local'
+system_id = None
+with engine.begin() as conn:
+    res = conn.execute(text("SELECT id FROM users WHERE email = :email"), {"email": system_email})
+    row = res.fetchone()
+    if row:
+        system_id = str(row[0])
+    else:
+        system_id = str(uuid4())
+        conn.execute(text("""
+            INSERT INTO users (id, email, password_hash, full_name, status, created_at, updated_at, MUST_CHANGE_PASSWORD)
+            VALUES (:id, :email, :pwd, :full_name, 'ACTIVE', now(), now(), false)
+        """), {"id": system_id, "email": system_email, "pwd": '' , "full_name": 'system'})
+
+batch_data = {
+    'id': BATCH_ID,
+    'filename': 'GBL - Juillet 2026.xlsx',
+    'file_checksum': hashlib.md5(open(file_path, 'rb').read()).hexdigest(),
+    'entity_type': 'multiple',
+    'status': 'COMPLETED',
+    'total_rows': len(df),
+    'processed_rows': len(df),
+    'accepted_rows': len(df),
+    'rejected_rows': 0,
+    'completed_at': datetime.now(),
+    'created_by': system_id
+}
+
+# Vérifier si la table existe
+try:
+    batch_df = pd.DataFrame([batch_data])
+    batch_df.to_sql('import_batches', engine, if_exists='append', index=False)
+    print("✅ Batch enregistré")
+except Exception as e:
+    print(f"⚠️ Erreur lors de l'enregistrement du batch: {e}")
+
+# ============================================================
+# 7. RÉSUMÉ FINAL
+# ============================================================
+
+print("\n" + "=" * 60)
+print("📊 RÉSUMÉ DE L'IMPORT")
+print("=" * 60)
+
+# Vérification des compteurs
+with engine.connect() as conn:
+    result = conn.execute(text("""
+        SELECT 
+            (SELECT COUNT(*) FROM centre) AS centres,
+            (SELECT COUNT(*) FROM agence) AS agences,
+            (SELECT COUNT(*) FROM gestionnaire) AS gestionnaires,
+            (SELECT COUNT(*) FROM client) AS clients,
+            (SELECT COUNT(*) FROM compte) AS comptes,
+            (SELECT COUNT(*) FROM facture) AS factures,
+            (SELECT COUNT(*) FROM service) AS services
+    """))
+    row = result.fetchone()
+    
+print(f"""
+┌─────────────────┬────────────┐
+│ Table           │ Effectif   │
+├─────────────────┼────────────┤
+│ CENTRE          │ {row[0]:>10} │
+│ AGENCE          │ {row[1]:>10} │
+│ GESTIONNAIRE    │ {row[2]:>10} │
+│ CLIENT          │ {row[3]:>10} │
+│ COMPTE          │ {row[4]:>10} │
+│ FACTURE         │ {row[5]:>10} │
+│ SERVICE         │ {row[6]:>10} │
+└─────────────────┴────────────┘
+""")
+
+print("✅ Import terminé avec succès !")
+print(f"🔑 Batch ID: {BATCH_ID}")
+print("📌 Les tables SOUSCRIRE et PAIEMENT peuvent être importées depuis des fichiers séparés si nécessaire.")
