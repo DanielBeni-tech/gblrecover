@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getReceivables } from "@/api/client";
+import { getAccountInvoices, listClients, getClientAccounts } from "@/api/client";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,72 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { xaf, dateFr } from "@/lib/format";
 
 const PAGE_SIZE = 10;
+
+interface ReceivableRow {
+  id: string;
+  customerId: string;
+  customerName: string;
+  accountNumber: string;
+  invoiceNumber: string;
+  initial: number;
+  balance: number;
+  ageDays: number;
+  dueDate: string;
+  status: string;
+}
+
+function receivableStatus(ageDays: number): string {
+  if (ageDays > 90) return "urgente";
+  if (ageDays > 30) return "en_retard";
+  return "normale";
+}
+
+/**
+ * Récupère les créances en agrégeant les factures impayées de tous les comptes
+ * des clients présents dans le système. Pas d'endpoint /receivables côté backend
+ * à ce stade : on dérive depuis /clients + /accounts + /accounts/{id}/invoices.
+ */
+async function fetchReceivables(): Promise<ReceivableRow[]> {
+  const clients = await listClients({ page: 1, pageSize: 100 });
+  const perClient = await Promise.all(
+    clients.map(async (c) => {
+      const accounts = await getClientAccounts(c.code_client).catch(() => []);
+      const invoicesByAccount = await Promise.all(
+        accounts.map(async (a) => {
+          const invs = await getAccountInvoices(a.num_compte, { pageSize: 200 }).catch(() => []);
+          return invs
+            .filter((inv) => (inv.outstanding_amount ?? 0) > 0)
+            .map((inv) => ({ inv, account: a }));
+        }),
+      );
+      return invoicesByAccount.flat();
+    }),
+  );
+  const now = Date.now();
+  const rows: ReceivableRow[] = [];
+  for (const items of perClient) {
+    for (const { inv, account } of items) {
+      const issue = inv.date_emission ? new Date(inv.date_emission).getTime() : now;
+      const ageDays = Math.max(0, Math.floor((now - issue) / 86_400_000));
+      const total = inv.montant_facture ?? 0;
+      const paid = inv.paid_amount ?? 0;
+      const balance = inv.outstanding_amount ?? total - paid;
+      rows.push({
+        id: inv.id_facture,
+        customerId: String(account.code_client),
+        customerName: "",
+        accountNumber: String(account.num_compte),
+        invoiceNumber: inv.id_facture,
+        initial: total,
+        balance,
+        ageDays,
+        dueDate: inv.date_emission ?? "",
+        status: receivableStatus(ageDays),
+      });
+    }
+  }
+  return rows;
+}
 
 export function ReceivablesPage() {
   const [query, setQuery] = useState("");
@@ -29,9 +95,22 @@ export function ReceivablesPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const filters = useMemo(() => ({ query: debounced, status, page, pageSize: PAGE_SIZE }), [debounced, status, page]);
+  const { data, isLoading } = useQuery({
+    queryKey: ["receivables"],
+    queryFn: fetchReceivables,
+    staleTime: 30_000,
+  });
 
-  const { data, isLoading } = useQuery({ queryKey: ["receivables", filters], queryFn: () => getReceivables(filters) });
+  const items = useMemo(() => {
+    return (data ?? []).filter((r) => {
+      if (status && r.status !== status) return false;
+      if (!debounced) return true;
+      const q = debounced.toLowerCase();
+      return r.invoiceNumber.toLowerCase().includes(q) || r.customerId.toLowerCase().includes(q);
+    });
+  }, [data, debounced, status]);
+
+  const pageItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
@@ -40,7 +119,7 @@ export function ReceivablesPage() {
         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-12">
           <div className="md:col-span-8">
             <Label htmlFor="r-q">Recherche</Label>
-            <Input id="r-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Numéro de facture, ID client…" />
+            <Input id="r-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Numéro de facture, code client…" />
           </div>
           <div className="md:col-span-4">
             <Label htmlFor="r-status">Statut</Label>
@@ -59,7 +138,7 @@ export function ReceivablesPage() {
       <Card className="overflow-hidden">
         <div className="border-b border-outline-variant bg-surface px-4 py-2.5">
           <p className="text-[16px] font-semibold text-on-surface">
-            {(data?.total ?? 0).toLocaleString("fr-FR")} <span className="text-[14px] font-normal text-on-surface-variant">créances</span>
+            {items.length.toLocaleString("fr-FR")} <span className="text-[14px] font-normal text-on-surface-variant">créances ouvertes</span>
           </p>
         </div>
         {isLoading ? (
@@ -68,23 +147,22 @@ export function ReceivablesPage() {
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
-      ) : data && data.items.length === 0 ? (
-        <EmptyState
-          title="Aucune créance ouverte"
-          description="Toutes les dettes sont réglées ou les filtres sont trop restrictifs. Ajustez votre recherche pour voir plus de résultats."
-          action={
-            <Button variant="outline" size="sm" onClick={() => {}}>
-              Consulter les clients
-            </Button>
-          }
-        />
+        ) : pageItems.length === 0 ? (
+          <EmptyState
+            title="Aucune créance ouverte"
+            description="Toutes les dettes sont réglées ou les filtres sont trop restrictifs. Ajustez votre recherche pour voir plus de résultats."
+            action={
+              <Button variant="outline" size="sm" onClick={() => {}}>
+                Consulter les clients
+              </Button>
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table className="min-w-[900px]">
               <TableHeader>
                 <tr>
                   <TableHead>Facture</TableHead>
-                  <TableHead>Client</TableHead>
                   <TableHead>Compte</TableHead>
                   <TableHead className="text-right">Montant initial</TableHead>
                   <TableHead className="text-right">Solde</TableHead>
@@ -94,10 +172,9 @@ export function ReceivablesPage() {
                 </tr>
               </TableHeader>
               <TableBody>
-                {data?.items.map((r) => (
+                {pageItems.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="t-tabular text-primary-container">{r.invoiceNumber}</TableCell>
-                    <TableCell className="max-w-[200px] truncate font-medium">{r.customerId}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{r.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-right text-on-surface-variant">{xaf(r.initial)}</TableCell>
                     <TableCell className={`t-tabular text-right font-semibold ${r.balance > 0 ? "text-error" : "text-on-surface"}`}>
@@ -106,7 +183,7 @@ export function ReceivablesPage() {
                     <TableCell className="t-tabular text-on-surface-variant">{r.ageDays} j</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(r.dueDate)}</TableCell>
                     <TableCell>
-                      <Badge tone={receivableStatusTone[r.status]}>{receivableStatusLabel[r.status]}</Badge>
+                      <Badge tone={receivableStatusTone[r.status] ?? "neutral"}>{receivableStatusLabel[r.status] ?? r.status}</Badge>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -114,7 +191,7 @@ export function ReceivablesPage() {
             </Table>
           </div>
         )}
-        {data && data.total > 0 && <Pagination page={page} pageSize={PAGE_SIZE} total={data.total} onChange={setPage} />}
+        {items.length > 0 && <Pagination page={page} pageSize={PAGE_SIZE} total={items.length} onChange={setPage} />}
       </Card>
     </>
   );

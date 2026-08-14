@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from passlib.context import CryptContext
 from uuid import UUID
+from fastapi import HTTPException, status as http_status
 
 from app.models.user import User
 from app.models.role import Role
@@ -21,13 +22,23 @@ from app.models.finance import (
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# bcrypt impose une limite stricte de 72 octets. On tronque donc les secrets
+# en UTF-8 avant de les hacher pour éviter les `ValueError: password cannot
+# be longer than 72 bytes` levés par bcrypt >= 4.0.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _truncate_for_bcrypt(password: str) -> str:
+    encoded = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    return encoded.decode("utf-8", errors="ignore")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(_truncate_for_bcrypt(plain_password), hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(_truncate_for_bcrypt(password))
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -416,8 +427,9 @@ async def get_payment(db: AsyncSession, payment_id: str):
 
 
 def _todo(name: str) -> None:
-    raise NotImplementedError(
-        f"TODO: implement {name} — see API_specification_and_db_coherence_v2.md"
+    raise HTTPException(
+        status_code=http_status.HTTP_501_NOT_IMPLEMENTED,
+        detail=f"TODO: implement {name} — see API_specification_and_db_coherence_v2.md",
     )
 
 

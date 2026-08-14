@@ -50,3 +50,21 @@ def test_health_db():
     """Route /health/db — renvoie 200 si DB up, 503 sinon."""
     r = client.get("/health/db")
     assert r.status_code in (200, 503)
+
+
+def test_demo_seed_credentials():
+    """Le script de chargement doit exposer les identifiants de démonstration attendus."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "database" / "load_data.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    module_names = {node.targets[0].id for node in tree.body if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)}
+
+    assert "DEMO_EMAIL" in module_names
+    assert "DEMO_PASSWORD" in module_names
+    assert "hash_password" in source
+    assert "verify_password" in source
+    assert "agent@camtel.cm" in source
+    assert "demo1234" in source

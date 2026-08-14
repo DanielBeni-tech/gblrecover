@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Activity, CheckCircle2, Eye, EyeOff, Lock, ShieldCheck, User } from "lucide-react";
-import { login } from "@/api/client";
-import { demoCredentials } from "@/data/mock-data";
+import { clearStoredSession, getStoredSession, login, setStoredSession } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 
@@ -21,13 +20,46 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Si une session existe déjà, on redirige vers le dashboard
+  useEffect(() => {
+    if (getStoredSession()) navigate("/dashboard", { replace: true });
+  }, [navigate]);
+
+  // Si le backend nous déconnecte (401 intercepté par apiRequest), on revient à /login
+  useEffect(() => {
+    const handler = () => {
+      clearStoredSession();
+      navigate("/login", { replace: true });
+    };
+    window.addEventListener("gbl:session-expired", handler);
+    return () => window.removeEventListener("gbl:session-expired", handler);
+  }, [navigate]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
       const session = await login(identifier, password);
-      localStorage.setItem("gbl-session", JSON.stringify(session));
+      // On normalise la forme de la session : si le backend ne renvoie pas l'objet user
+      // (cas de /auth/refresh par ex.), on conserve un user minimal pour l'UI.
+      const storedUser = session.user ?? {
+        id: "00000000-0000-0000-0000-000000000001",
+        email: identifier,
+        full_name: identifier,
+        status: "ACTIVE",
+      };
+      setStoredSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        token_type: session.token_type,
+        user: {
+          id: storedUser.id,
+          email: storedUser.email,
+          full_name: storedUser.full_name,
+          status: storedUser.status,
+        },
+      });
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur de connexion.");
@@ -77,7 +109,7 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-primary">
-              <Activity className="h-6 w-6 text-on-primary" />
+              <Activity className="h-6 w-6 text-on-on-primary" />
             </div>
             <h1 className="text-[24px] font-semibold text-on-surface">GBLRecover</h1>
             <p className="text-[13px] text-on-surface-variant">Plateforme de Revenue Assurance — CAMTEL</p>
@@ -138,15 +170,9 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 rounded-card border border-outline-variant bg-surface-container-low p-3.5">
-            <p className="t-label mb-1.5 text-on-surface-variant">Compte de démonstration</p>
-            <p className="t-tabular text-[13px] text-on-surface">
-              {demoCredentials.identifier} · {demoCredentials.password}
-            </p>
-          </div>
           <p className="mt-5 flex items-center gap-1.5 text-[12px] text-on-surface-variant">
             <ShieldCheck className="h-3.5 w-3.5" />
-            Session sécurisée — données de démonstration anonymisées.
+            Session sécurisée — accès réservé aux équipes habilitées.
           </p>
         </div>
       </div>

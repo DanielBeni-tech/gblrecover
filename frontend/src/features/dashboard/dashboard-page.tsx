@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowRight, Clock, ListTodo, RefreshCw, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, ListTodo, RefreshCw } from "lucide-react";
 import { getDashboard } from "@/api/client";
 import type { UiPriorityItem } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -12,7 +12,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TrendChart } from "@/components/charts/trend-chart";
 import { AgingList } from "@/components/charts/aging-chart";
 import { xaf, dateFr, dateTimeFr } from "@/lib/format";
-import { Select } from "@/components/ui/select";
 
 export function DashboardPage() {
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
@@ -59,27 +58,11 @@ export function DashboardPage() {
         size="lg"
         title="Tableau de bord — Revenue Assurance"
         subtitle="Vue consolidée des indicateurs de recouvrement"
-        actions={
-          <>
-            <Select aria-label="Période" defaultValue="30j" className="h-9 w-auto">
-              <option value="30j">30 derniers jours</option>
-              <option value="trimestre">Dernier trimestre</option>
-              <option value="annee">Depuis janvier</option>
-            </Select>
-            <Select aria-label="Périmètre" defaultValue="tous" className="h-9 w-auto">
-              <option value="tous">Tous les centres</option>
-              <option value="cg-entreprises">CG Entreprises</option>
-              <option value="cg-etat">CG État</option>
-              <option value="cg-pme">CG PME</option>
-              <option value="cg-vip">CG Particuliers VIP</option>
-            </Select>
-          </>
-        }
       />
 
       <div className="flex items-center gap-2 text-[12px] text-on-surface-variant">
         <RefreshCw className="h-3 w-3" />
-        Données du lot « GBL — Juillet 2026 » · mises à jour le {dateTimeFr(refreshedAt)}
+        Mises à jour le {dateTimeFr(refreshedAt)}
         <button onClick={() => refetch()} aria-label="Actualiser" className="rounded p-1 text-on-surface-variant hover:bg-surface-container-high hover:text-primary">
           <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
         </button>
@@ -89,39 +72,19 @@ export function DashboardPage() {
         <KpiCard
           label="Encours total"
           value={xaf(kpis.encoursTotal)}
-          delta={
-            <span className="flex items-center gap-1 text-[12px] text-error">
-              <TrendingUp className="h-3.5 w-3.5" /> +2,4 % vs mois dernier
-            </span>
-          }
         />
         <KpiCard
           label="Créances échues"
           value={xaf(kpis.echues)}
           tone="error"
-          delta={
-            <span className="flex items-center gap-1 text-[12px] text-error">
-              <AlertTriangle className="h-3.5 w-3.5" /> Action requise
-            </span>
-          }
         />
         <KpiCard
           label="Taux de recouvrement"
           value={`${kpis.tauxRecouvrement.toLocaleString("fr-FR")} %`}
-          delta={
-            <span className="flex items-center gap-1 text-[12px] text-primary">
-              <TrendingUp className="h-3.5 w-3.5" /> Objectif : 80 %
-            </span>
-          }
         />
         <KpiCard
           label="Actions en retard"
           value={kpis.actionsEnRetard.toLocaleString("fr-FR")}
-          delta={
-            <span className="flex items-center gap-1 text-[12px] text-on-surface-variant">
-              <Clock className="h-3.5 w-3.5" /> Échéances dépassées
-            </span>
-          }
         />
       </div>
 
@@ -147,16 +110,14 @@ export function DashboardPage() {
             tone: "warning",
           });
         }
-        if (actions.length === 0) {
-          actions.push({
-            icon: ListTodo,
-            title: "Tout est en ordre",
-            desc: "Aucune action urgente pour le moment. Continuez la surveillance quotidienne.",
-            link: "/clients",
-            linkLabel: "Parcourir le portefeuille",
-            tone: "primary",
-          });
-        }
+        actions.push({
+          icon: ListTodo,
+          title: "Parcourir le portefeuille",
+          desc: "Accédez à la liste complète des clients et à leurs créances.",
+          link: "/clients",
+          linkLabel: "Voir les clients",
+          tone: "primary",
+        });
         return (
           <Card className="border-l-4 border-l-primary">
             <CardHeader>
@@ -223,26 +184,34 @@ export function DashboardPage() {
               </tr>
             </TableHeader>
             <TableBody>
-              {priorities.map((p: UiPriorityItem) => (
-                <TableRow key={p.id}>
-                  <TableCell className="t-tabular text-primary-container">
-                    <Link to={`/clients/${p.id}`} className="hover:underline">
-                      {p.id}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell className="t-tabular text-right font-semibold text-error">{xaf(p.overdue)}</TableCell>
-                  <TableCell className="t-tabular text-on-surface-variant">{dateFr(p.lastActionDate)}</TableCell>
-                  <TableCell>
-                    <Badge tone={customerStatusTone[p.status]}>{customerStatusLabel[p.status]}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link to={`/clients/${p.id}`} className="t-label text-primary hover:underline">
-                      Ouvrir
-                    </Link>
+              {priorities.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-on-surface-variant">
+                    Aucun dossier prioritaire à signaler pour le moment.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                priorities.map((p: UiPriorityItem) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="t-tabular text-primary-container">
+                      <Link to={`/clients/${p.id}`} className="hover:underline">
+                        {p.id}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="t-tabular text-right font-semibold text-error">{xaf(p.overdue)}</TableCell>
+                    <TableCell className="t-tabular text-on-surface-variant">{dateFr(p.lastActionDate)}</TableCell>
+                    <TableCell>
+                      <Badge tone={customerStatusTone[p.status]}>{customerStatusLabel[p.status]}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link to={`/clients/${p.id}`} className="t-label text-primary hover:underline">
+                        Ouvrir
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>

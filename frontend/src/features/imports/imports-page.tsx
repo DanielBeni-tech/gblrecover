@@ -11,8 +11,16 @@ import {
   RefreshCw,
   Upload,
 } from "lucide-react";
-import { getImportBatches, runImport } from "@/api/client";
-import type { UiImportResult } from "@/api/types";
+import {
+  cancelImportBatch,
+  downloadImportTemplateUrl,
+  getImportBatch,
+  listImportBatches,
+  listImportErrors,
+  startImport,
+} from "@/api/client";
+import { ApiError } from "@/api/types";
+import type { ImportBatch, ImportError } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/components/ui/toast";
 import { dateTimeFr } from "@/lib/format";
 
+/** Modèles CSV téléchargés en local (l'endpoint backend /imports/templates est encore en 501). */
 const templates: Record<string, string> = {
   Factures: "NUMERO_FACTURE;NUMERO_COMPTE;DATE_EMISSION;DATE_ECHEANCE;MONTANT;STATUT",
   Paiements: "REFERENCE_PAIEMENT;NUMERO_COMPTE;DATE_PAIEMENT;MONTANT",
@@ -30,40 +39,54 @@ const templates: Record<string, string> = {
   Créances: "NUMERO_FACTURE;NUMERO_COMPTE;MONTANT_INITIAL;SOLDE;DATE_ECHEANCE",
 };
 
-const batchTone: Record<string, "success" | "secondary" | "error"> = { succes: "success", partiel: "secondary", echec: "error" };
-const batchLabel: Record<string, string> = { succes: "Succès", partiel: "Partiel", echec: "Échec" };
+/** Mappage libellé UI → entity_type backend. */
+const entityType: Record<string, string> = {
+  Factures: "invoices",
+  Paiements: "payments",
+  Clients: "clients",
+  Créances: "receivables",
+};
+
+const batchTone: Record<string, "success" | "secondary" | "error"> = {
+  SUCCESS: "success",
+  COMPLETED: "success",
+  PARTIAL: "secondary",
+  FAILED: "error",
+  ERROR: "error",
+  CANCELLED: "error",
+};
+const batchLabel: Record<string, string> = {
+  SUCCESS: "Succès",
+  COMPLETED: "Succès",
+  PARTIAL: "Partiel",
+  FAILED: "Échec",
+  ERROR: "Échec",
+  CANCELLED: "Annulé",
+};
+
+interface RejectRow { row: number; column: string; value: string; reason: string; }
+
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export function ImportsPage() {
   const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [type, setType] = useState("Factures");
   const [validating, setValidating] = useState(false);
-  const [result, setResult] = useState<UiImportResult | null>(null);
+  const [batch, setBatch] = useState<ImportBatch | null>(null);
+  const [rejects, setRejects] = useState<RejectRow[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const { data: batches, refetch } = useQuery({ queryKey: ["imports"], queryFn: getImportBatches });
+  const { data: batches, refetch } = useQuery({ queryKey: ["imports"], queryFn: () => listImportBatches({ pageSize: 50 }) });
 
-  const acceptFile = (f: File | undefined | null) => {
-    if (!f) return;
-    if (!f.name.toLowerCase().endsWith(".xlsx") && !f.name.toLowerCase().endsWith(".xls")) {
-      toast.error("Format non autorisé. Sélectionnez un fichier .xlsx ou .xls.");
-      return;
-    }
-    setFile(f);
-    setResult(null);
-    setStep(1);
-    setValidating(true);
-    runImport(f.name, type)
-      .then((r) => setResult(r))
-      .catch(() => toast.error("La validation du fichier a échoué."))
-      .finally(() => setValidating(false));
-  };
-
-  const downloadTemplate = () => {
-    const blob = new Blob(["\uFEFF" + templates[type]], { type: "text/csv;charset=utf-8" });
+  const downloadLocalTemplate = () => {
+    const blob = new Blob(["﻿" + templates[type]], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -73,17 +96,90 @@ export function ImportsPage() {
     toast.success("Modèle téléchargé.");
   };
 
-  const confirmImport = () => {
+  const downloadBackendTemplate = async () => {
+    try {
+      const res = await fetch(downloadImportTemplateUrl(), { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `modele_gblrecover_${type.toLowerCase()}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Fallback : modèle CSV local si le backend ne le fournit pas encore
+      downloadLocalTemplate();
+    }
+  };
+
+  const acceptFile = async (f: File | undefined | null) => {
+    if (!f) return;
+    if (!f.name.toLowerCase().endsWith(".xlsx") && !f.name.toLowerCase().endsWith(".xls")) {
+      toast.error("Format non autorisé. Sélectionnez un fichier .xlsx ou .xls.");
+      return;
+    }
+    setFile(f);
+    setRejects([]);
+    setBatch(null);
+    setStep(1);
+    setValidating(true);
+    try {
+      const start = await startImport(f, entityType[type] ?? type, newIdempotencyKey());
+      // On récupère ensuite le détail du batch (statut + erreurs) — l'API peut mettre
+      // quelques secondes à terminer le traitement asynchrone.
+      const detail = await getImportBatch(start.batch_id);
+      setBatch(detail);
+      try {
+        const errs: ImportError[] = await listImportErrors(start.batch_id, { pageSize: 200 });
+        setRejects(
+          errs.map((e) => ({
+            row: e.row_number,
+            column: e.column_name ?? "",
+            value: e.raw_value ?? "",
+            reason: e.error_message,
+          })),
+        );
+      } catch {
+        setRejects([]);
+      }
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 501 || err.status === 0)) {
+        toast.error("L'API d'import n'est pas encore disponible. Réessayez plus tard.");
+      } else {
+        toast.error(err instanceof Error ? err.message : "La validation du fichier a échoué.");
+      }
+      setStep(0);
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const confirmImport = async () => {
     setStep(2);
-    queryClient.invalidateQueries({ queryKey: ["imports"] });
-    toast.success("Import validé — lot enregistré et tracé.");
+    await queryClient.invalidateQueries({ queryKey: ["imports"] });
+    toast.success("Lot enregistré et tracé.");
+  };
+
+  const cancel = async (batchId: string) => {
+    try {
+      await cancelImportBatch(batchId);
+      await refetch();
+      toast.success("Lot annulé.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Annulation impossible.");
+    }
   };
 
   const restart = () => {
     setFile(null);
-    setResult(null);
+    setBatch(null);
+    setRejects([]);
     setStep(0);
   };
+
+  const batchFinished = batch && (batch.status === "SUCCESS" || batch.status === "COMPLETED" || batch.status === "PARTIAL");
+  const batchBlocked = batch && (batch.status === "FAILED" || batch.status === "ERROR");
 
   return (
     <>
@@ -117,7 +213,7 @@ export function ImportsPage() {
               onDrop={(e) => {
                 e.preventDefault();
                 setDragging(false);
-                acceptFile(e.dataTransfer.files?.[0]);
+                void acceptFile(e.dataTransfer.files?.[0]);
               }}
               className={`group flex min-h-[300px] w-full flex-col items-center justify-center gap-3 rounded-panel border-2 border-dashed p-8 text-center transition-colors ${
                 dragging ? "border-primary bg-primary-fixed/20" : "border-outline-variant hover:border-primary hover:bg-primary-fixed/10"
@@ -146,8 +242,8 @@ export function ImportsPage() {
                 className="hidden"
                 aria-label="Sélectionner un fichier Excel"
                 onChange={(e) => {
-                  acceptFile(e.target.files?.[0]);
-                  e.target.value = "";
+                  void acceptFile(e.target.files?.[0]);
+                  e.currentTarget.value = "";
                 }}
               />
             </button>
@@ -174,7 +270,7 @@ export function ImportsPage() {
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Identifiants clients uniques
                 </li>
               </ul>
-              <Button variant="outline" onClick={downloadTemplate} className="w-full">
+              <Button variant="outline" onClick={downloadBackendTemplate} className="w-full">
                 <Download className="h-4 w-4" /> Télécharger le modèle type
               </Button>
             </CardContent>
@@ -191,23 +287,23 @@ export function ImportsPage() {
                 <p className="text-[15px] font-semibold text-on-surface">Validation du fichier « {file?.name} »…</p>
                 <p className="text-[13px] text-on-surface-variant">Contrôle des colonnes, des types et des règles métier.</p>
               </>
-            ) : result ? (
+            ) : batch ? (
               <>
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-fixed">
                   <FileSpreadsheet className="h-7 w-7 text-primary" />
                 </div>
                 <p className="text-[16px] font-semibold text-on-surface">
-                  {result.batch.rejected === 0 ? "Fichier conforme" : result.batch.status === "echec" ? "Fichier bloqué" : "Rejets partiels détectés"}
+                  {batchBlocked ? "Fichier bloqué" : rejects.length > 0 ? "Rejets partiels détectés" : "Fichier conforme"}
                 </p>
                 <div className="flex gap-6 text-center">
                   <div>
-                    <p className="t-tabular text-[20px] font-semibold text-success">{result.batch.processed.toLocaleString("fr-FR")}</p>
+                    <p className="t-tabular text-[20px] font-semibold text-success">{batch.accepted_rows.toLocaleString("fr-FR")}</p>
                     <p className="text-[12px] text-on-surface-variant">lignes valides</p>
                   </div>
                   <div className="w-px bg-outline-variant" />
                   <div>
-                    <p className={`t-tabular text-[20px] font-semibold ${result.batch.rejected > 0 ? "text-warning" : "text-on-surface-variant"}`}>
-                      {result.batch.rejected.toLocaleString("fr-FR")}
+                    <p className={`t-tabular text-[20px] font-semibold ${batch.rejected_rows > 0 ? "text-warning" : "text-on-surface-variant"}`}>
+                      {batch.rejected_rows.toLocaleString("fr-FR")}
                     </p>
                     <p className="text-[12px] text-on-surface-variant">rejets</p>
                   </div>
@@ -216,7 +312,7 @@ export function ImportsPage() {
             ) : null}
           </CardContent>
 
-          {result && result.rejects.length > 0 && (
+          {rejects.length > 0 && (
             <div>
               <div className="border-t border-outline-variant bg-surface px-4 py-2.5">
                 <p className="text-[14px] font-semibold text-on-surface">Détail des rejets</p>
@@ -232,7 +328,7 @@ export function ImportsPage() {
                     </tr>
                   </TableHeader>
                   <TableBody>
-                    {result.rejects.map((r, i) => (
+                    {rejects.map((r, i) => (
                       <TableRow key={i}>
                         <TableCell className="t-tabular text-on-surface-variant">{r.row}</TableCell>
                         <TableCell className="t-tabular text-primary-container">{r.column}</TableCell>
@@ -246,15 +342,15 @@ export function ImportsPage() {
             </div>
           )}
 
-          {result && (
+          {batch && (
             <div className="flex flex-wrap justify-end gap-2 border-t border-outline-variant bg-surface-container-low px-4 py-3">
               <Button variant="outline" onClick={restart}>
                 <RefreshCw className="h-4 w-4" /> Corriger le fichier
               </Button>
-              <Button variant="outline" onClick={downloadTemplate}>
+              <Button variant="outline" onClick={downloadLocalTemplate}>
                 <Download className="h-4 w-4" /> Télécharger le rapport de rejets
               </Button>
-              {result.batch.status !== "echec" ? (
+              {batchFinished ? (
                 <Button onClick={confirmImport}>Importer les lignes valides</Button>
               ) : (
                 <Button variant="danger" disabled>
@@ -266,7 +362,7 @@ export function ImportsPage() {
         </Card>
       )}
 
-      {step === 2 && result && (
+      {step === 2 && batch && (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success-container">
@@ -274,15 +370,15 @@ export function ImportsPage() {
             </div>
             <p className="text-[18px] font-semibold text-on-surface">Import terminé avec succès</p>
             <p className="max-w-md text-[13px] text-on-surface-variant">
-              Le lot <span className="t-tabular text-on-surface">{result.batch.id}</span> a été enregistré : {result.batch.processed.toLocaleString("fr-FR")} lignes traitées,{" "}
-              {result.batch.rejected.toLocaleString("fr-FR")} rejets isolés dans le rapport.
+              Le lot <span className="t-tabular text-on-surface">{batch.id}</span> a été enregistré : {batch.accepted_rows.toLocaleString("fr-FR")} lignes traitées,{" "}
+              {batch.rejected_rows.toLocaleString("fr-FR")} rejets isolés dans le rapport.
             </p>
             <div className="mt-2 flex flex-wrap justify-center gap-3">
               <Button variant="outline" onClick={restart}>
                 <Upload className="h-4 w-4" /> Nouvel import
               </Button>
-              <Button variant="outline" onClick={downloadTemplate}>
-                <Download className="h-4 w-4" /> Rapport final (démo)
+              <Button variant="outline" onClick={downloadLocalTemplate}>
+                <Download className="h-4 w-4" /> Rapport final
               </Button>
             </div>
           </CardContent>
@@ -306,30 +402,32 @@ export function ImportsPage() {
                 <TableHead>Statut</TableHead>
                 <TableHead className="text-right">Lignes traitées</TableHead>
                 <TableHead className="text-right">Rejetées</TableHead>
-                <TableHead className="text-center">Rapport</TableHead>
+                <TableHead className="text-center">Action</TableHead>
               </tr>
             </TableHeader>
             <TableBody>
-              {batches?.map((b) => (
+              {(batches ?? []).map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell className="t-tabular text-on-surface-variant">{dateTimeFr(b.date)}</TableCell>
-                  <TableCell className="font-medium">{b.fileName}</TableCell>
-                  <TableCell className="text-on-surface-variant">{b.type}</TableCell>
+                  <TableCell className="t-tabular text-on-surface-variant">{dateTimeFr(b.started_at ?? b.created_at)}</TableCell>
+                  <TableCell className="font-medium">{b.filename}</TableCell>
+                  <TableCell className="text-on-surface-variant">{b.entity_type}</TableCell>
                   <TableCell>
-                    <Badge tone={batchTone[b.status]}>{batchLabel[b.status]}</Badge>
+                    <Badge tone={batchTone[b.status] ?? "neutral"}>{batchLabel[b.status] ?? b.status}</Badge>
                   </TableCell>
-                  <TableCell className="t-tabular text-right">{b.processed.toLocaleString("fr-FR")}</TableCell>
-                  <TableCell className={`t-tabular text-right ${b.rejected > 0 ? "font-semibold text-warning" : "text-on-surface-variant"}`}>
-                    {b.rejected.toLocaleString("fr-FR")}
+                  <TableCell className="t-tabular text-right">{b.processed_rows.toLocaleString("fr-FR")}</TableCell>
+                  <TableCell className={`t-tabular text-right ${b.rejected_rows > 0 ? "font-semibold text-warning" : "text-on-surface-variant"}`}>
+                    {b.rejected_rows.toLocaleString("fr-FR")}
                   </TableCell>
                   <TableCell className="text-center">
-                    <button
-                      aria-label="Télécharger le rapport"
-                      className="rounded p-1 text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
-                      onClick={() => toast.success("Rapport téléchargé (démo).")}
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
+                    {(b.status === "RUNNING" || b.status === "PENDING") && (
+                      <button
+                        onClick={() => cancel(b.id)}
+                        className="rounded p-1 text-on-surface-variant hover:bg-error-container hover:text-error"
+                        title="Annuler le lot"
+                      >
+                        <AlertTriangle className="h-4 w-4" />
+                      </button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -338,8 +436,7 @@ export function ImportsPage() {
         </div>
       </Card>
 
-      {/* Référence de fraîcheur */}
-      <p className="text-[12px] text-on-surface-variant">Données de démonstration — volumes et montants synthétiques anonymisés (lot « GBL — Juillet 2026 »).</p>
+      <p className="text-[12px] text-on-surface-variant">Import en flux multipart avec en-tête X-Idempotency-Key (rejeu sûr côté backend).</p>
     </>
   );
 }

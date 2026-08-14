@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FilterX, Plus, UserPlus, ArrowRight } from "lucide-react";
-import { createCustomer, searchCustomers } from "@/api/client";
-import { agencies, centers, managers } from "@/data/mock-data";
-import type { CustomerType, UiCustomer } from "@/api/types";
+import { createCustomer, listAgencies, listCentres, listManagers, searchCustomers } from "@/api/client";
+import type { CustomerType } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -17,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { xaf, dateFr } from "@/lib/format";
+import { xaf } from "@/lib/format";
 
 const PAGE_SIZE = 10;
 
@@ -50,9 +49,14 @@ export function ClientsPage() {
     queryFn: () => searchCustomers(filters, page, PAGE_SIZE),
   });
 
+  // Référentiels pour les filtres (alimentés par l'API)
+  const agenciesQ = useQuery({ queryKey: ["agencies"], queryFn: () => listAgencies({ pageSize: 200 }) });
+  const centresQ = useQuery({ queryKey: ["centres"], queryFn: () => listCentres({ pageSize: 200 }) });
+  const managersQ = useQuery({ queryKey: ["managers"], queryFn: () => listManagers({ pageSize: 200 }) });
+
   const exportCsv = async () => {
     const all = await searchCustomers(filters, 1, 10_000);
-    const header = ["Client ID;Nom;Type;Agence;Centre;Gestionnaire;Statut;Solde (XAF);Créances échues (XAF);Dernier paiement"];
+    const header = ["Client ID;Nom;Type;Agence;Centre;Gestionnaire;Statut;Solde (XAF);Créances échues (XAF)"];
     const rows = all.items.map((c) =>
       [
         c.id,
@@ -64,10 +68,9 @@ export function ClientsPage() {
         c.status,
         c.balance,
         c.overdue,
-        c.lastPayment.slice(0, 10),
       ].join(";"),
     );
-    const blob = new Blob(["\uFEFF" + [...header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["﻿" + [...header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -106,16 +109,16 @@ export function ClientsPage() {
               id="q"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="ID client, nom complet, n° téléphone…"
+              placeholder="ID client, nom complet…"
             />
           </div>
           <div className="md:col-span-2">
             <Label htmlFor="agence">Agence</Label>
             <Select id="agence" value={agency} onChange={(e) => setAgency(e.target.value)}>
               <option value="">Toutes les agences</option>
-              {agencies.map((a) => (
-                <option key={a.id} value={a.name}>
-                  {a.name}
+              {(agenciesQ.data ?? []).map((a) => (
+                <option key={a.id_agence} value={a.id_agence}>
+                  {a.nom_agence ?? a.id_agence}
                 </option>
               ))}
             </Select>
@@ -124,9 +127,9 @@ export function ClientsPage() {
             <Label htmlFor="centre">Centre de gestion</Label>
             <Select id="centre" value={center} onChange={(e) => setCenter(e.target.value)}>
               <option value="">Tous les centres</option>
-              {centers.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
+              {(centresQ.data ?? []).map((c) => (
+                <option key={c.nom_centre} value={c.nom_centre}>
+                  {c.nom_centre}
                 </option>
               ))}
             </Select>
@@ -192,13 +195,12 @@ export function ClientsPage() {
                   <TableHead>Agence</TableHead>
                   <TableHead className="text-right">Solde total</TableHead>
                   <TableHead className="text-right">Créances échues</TableHead>
-                  <TableHead>Dernier paiement</TableHead>
                   <TableHead>Gestionnaire</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </tr>
               </TableHeader>
               <TableBody>
-                {data?.items.map((c: UiCustomer) => (
+                {data?.items.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell className="t-tabular text-primary-container">
                       <Link to={`/clients/${c.id}`} className="font-medium hover:underline">
@@ -206,13 +208,14 @@ export function ClientsPage() {
                       </Link>
                     </TableCell>
                     <TableCell className="max-w-[220px] truncate font-medium">{c.name}</TableCell>
-                    <TableCell className="text-on-surface-variant">{c.agency}</TableCell>
+                    <TableCell className="text-on-surface-variant">{c.agency || "—"}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(c.balance)}</TableCell>
                     <TableCell className={`t-tabular text-right font-semibold ${c.overdue > 0 ? "bg-error-container/10 text-error" : "text-outline"}`}>
                       {xaf(c.overdue)}
                     </TableCell>
-                    <TableCell className="t-tabular text-on-surface-variant">{dateFr(c.lastPayment)}</TableCell>
-                    <TableCell className="text-on-surface-variant">{managers.find((m) => m.id === c.managerId)?.name ?? "—"}</TableCell>
+                    <TableCell className="text-on-surface-variant">
+                      {c.managerName || (managersQ.data ?? []).find((m) => m.mat_gestionnaire === c.managerId)?.nom_gestionnaire || "—"}
+                    </TableCell>
                     <TableCell className="text-center">
                       <Link
                         to={`/clients/${c.id}`}
@@ -238,11 +241,12 @@ export function ClientsPage() {
       <NewCustomerModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
+        agencies={(agenciesQ.data ?? []).map((a) => ({ id: a.id_agence, name: a.nom_agence ?? a.id_agence }))}
         onCreated={(id) => {
           queryClient.invalidateQueries({ queryKey: ["customers"] });
           setCreateOpen(false);
           setPage(1);
-          toast.success("Dossier créé (données de démonstration).");
+          toast.success("Dossier créé.");
           navigate(`/clients/${id}`);
         }}
       />
@@ -250,10 +254,20 @@ export function ClientsPage() {
   );
 }
 
-function NewCustomerModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (id: string) => void }) {
+function NewCustomerModal({
+  open,
+  onClose,
+  onCreated,
+  agencies,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (id: string) => void;
+  agencies: Array<{ id: string; name: string }>;
+}) {
   const [name, setName] = useState("");
   const [type, setType] = useState<CustomerType>("entreprise");
-  const [agency, setAgency] = useState(agencies[0]!.name);
+  const [agency, setAgency] = useState(agencies[0]?.id ?? "");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -305,11 +319,15 @@ function NewCustomerModal({ open, onClose, onCreated }: { open: boolean; onClose
           <div>
             <Label htmlFor="nc-agence">Agence</Label>
             <Select id="nc-agence" value={agency} onChange={(e) => setAgency(e.target.value)}>
-              {agencies.map((a) => (
-                <option key={a.id} value={a.name}>
-                  {a.name}
-                </option>
-              ))}
+              {agencies.length === 0 ? (
+                <option value="">Aucune agence disponible</option>
+              ) : (
+                agencies.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))
+              )}
             </Select>
           </div>
         </div>
@@ -317,9 +335,6 @@ function NewCustomerModal({ open, onClose, onCreated }: { open: boolean; onClose
           <Label htmlFor="nc-phone">Téléphone</Label>
           <Input id="nc-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+237 6XX XX XX XX" />
         </div>
-        <p className="text-[12px] text-on-surface-variant">
-          Le dossier est créé en mémoire (démo). L'enregistrement persistant sera assuré par l'API backend.
-        </p>
       </form>
     </Modal>
   );
