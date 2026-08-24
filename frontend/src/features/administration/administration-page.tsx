@@ -83,7 +83,7 @@ export function AdministrationPage() {
                 ) : (
                   (centresQ.data ?? []).map((c) => (
                     <TableRow key={c.nom_centre}>
-                      <TableCell className="t-tabular text-primary-container">{c.nom_centre}</TableCell>
+                      <TableCell className="t-tabular text-data">{c.nom_centre}</TableCell>
                       <TableCell className="font-medium">{c.nom_centre}</TableCell>
                       <TableCell className="t-tabular text-right text-on-surface-variant">
                         {agenciesByCentre.get(c.nom_centre) ?? c.agences?.length ?? 0}

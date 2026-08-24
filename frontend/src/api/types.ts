@@ -408,6 +408,8 @@ export interface UiDashboardData {
     echues: number;
     tauxRecouvrement: number;
     actionsEnRetard: number;
+    totalComptes: number;
+    soldeNegatif: number;
   };
   aging: AgingDatum[];
   trend: Array<{ month: string; dette: number; encaissement: number }>;

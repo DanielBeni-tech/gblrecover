@@ -16,7 +16,6 @@ import {
   ApiError,
   type Account,
   type Agency,
-  type AgingDatum,
   type AuditEvent,
   type Centre,
   type Client,
@@ -39,7 +38,6 @@ import {
   type UiInvoice,
   type UiManager,
   type UiPayment,
-  type UiPriorityItem,
   type UiReceivable,
 } from "@/api/types";
 
@@ -423,6 +421,10 @@ export function getOrganizationHierarchy(): Promise<{ centres: Centre[] }> {
 // Clients
 // ============================================================
 
+export function listClientsCount(opts: { q?: string; status?: string; marche?: string } = {}): Promise<{ total: number }> {
+  return apiRequest<{ total: number }>("/clients/count", { query: qs({ q: opts.q, status: opts.status, marche: opts.marche }) });
+}
+
 export function listClients(opts: { q?: string; status?: string; client_type?: string; marche?: string; page?: number; pageSize?: number } = {}): Promise<Client[]> {
   return apiRequest<Client[]>("/clients", { query: qs({ q: opts.q, status: opts.status, client_type: opts.client_type, marche: opts.marche, page: opts.page, page_size: opts.pageSize }) });
 }
@@ -459,6 +461,24 @@ export function getClientHistory(clientId: number | string): Promise<ClientHisto
   return apiRequest<ClientHistoryItem[]>(`/clients/${clientId}/history`);
 }
 
+// Client sub-resources
+
+export function getClientInvoices(clientId: number | string, opts: { page?: number; pageSize?: number } = {}): Promise<Invoice[]> {
+  return apiRequest<Invoice[]>(`/clients/${clientId}/invoices`, { query: qs({ page: opts.page, page_size: opts.pageSize }) });
+}
+
+export function getClientInvoicesCount(clientId: number | string): Promise<{ total: number }> {
+  return apiRequest<{ total: number }>(`/clients/${clientId}/invoices/count`);
+}
+
+export function getClientPayments(clientId: number | string, opts: { page?: number; pageSize?: number } = {}): Promise<Payment[]> {
+  return apiRequest<Payment[]>(`/clients/${clientId}/payments`, { query: qs({ page: opts.page, page_size: opts.pageSize }) });
+}
+
+export function getClientPaymentsCount(clientId: number | string): Promise<{ total: number }> {
+  return apiRequest<{ total: number }>(`/clients/${clientId}/payments/count`);
+}
+
 // ============================================================
 // Comptes (finance §3.5)
 // ============================================================
@@ -485,6 +505,24 @@ export function getAccountPayments(accountId: number | string, opts: { page?: nu
 
 export function getAccountReceivableSummary(accountId: number | string): Promise<{ total_outstanding: number; overdue_amount: number; open_invoices: number }> {
   return apiRequest(`/accounts/${accountId}/receivable-summary`);
+}
+
+// Receivables
+
+export function listReceivables(opts: { q?: string; status?: string; page?: number; pageSize?: number } = {}): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/receivables", { query: qs({ q: opts.q, status: opts.status, page: opts.page, page_size: opts.pageSize }) });
+}
+
+export function listReceivablesCount(opts: { q?: string; status?: string } = {}): Promise<{ total: number }> {
+  return apiRequest<{ total: number }>("/receivables/count", { query: qs({ q: opts.q, status: opts.status }) });
+}
+
+export function listInvoicesCountFiltered(opts: { status?: string } = {}): Promise<{ total: number }> {
+  return apiRequest<{ total: number }>("/invoices/count", { query: qs({ status: opts.status }) });
+}
+
+export function listPaymentsCountFiltered(opts: { status?: string } = {}): Promise<{ total: number }> {
+  return apiRequest<{ total: number }>("/payments/count", { query: qs({ status: opts.status }) });
 }
 
 // ============================================================
@@ -631,18 +669,6 @@ export function downloadImportTemplateUrl(): string {
 // Reports / Dashboards (§3.10)
 // ============================================================
 
-export function getDashboardSummary(): Promise<ReportRow[]> {
-  return apiRequest<ReportRow[]>("/dashboards/summary");
-}
-
-export function getDashboardAging(): Promise<ReportRow[]> {
-  return apiRequest<ReportRow[]>("/dashboards/aging");
-}
-
-export function getDashboardTrend(): Promise<ReportRow[]> {
-  return apiRequest<ReportRow[]>("/dashboards/trend");
-}
-
 export function getDashboardActivity(): Promise<ReportRow[]> {
   return apiRequest<ReportRow[]>("/dashboards/activity");
 }
@@ -685,6 +711,30 @@ export function getZombiesReport(): Promise<ReportRow[]> {
 
 export function exportReportCsvUrl(report: string): string {
   return buildUrl("/reports/export/csv", qs({ report }));
+}
+
+// Dashboard analytics
+
+export interface DashboardFilters {
+  centres?: string;
+  agences?: string;
+  mois?: string;
+}
+
+export function getDashboardSummary(filters?: { centres?: string; agences?: string; mois?: string }): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/summary", { query: qs({ centres: filters?.centres, agences: filters?.agences, mois: filters?.mois }) });
+}
+
+export function getDashboardTrend(filters?: { centres?: string; agences?: string }): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/trend", { query: qs({ centres: filters?.centres, agences: filters?.agences }) });
+}
+
+export function getTopIndebtedClients(filters?: { centres?: string; agences?: string; mois?: string }): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/top-indebted", { query: qs({ centres: filters?.centres, agences: filters?.agences, mois: filters?.mois }) });
+}
+
+export function getCamtelDebts(filters?: { centres?: string; agences?: string }): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/camtel-debts", { query: qs({ centres: filters?.centres, agences: filters?.agences }) });
 }
 
 // ============================================================
@@ -753,15 +803,6 @@ export interface UiCustomerSummary {
   status: string;
   balance: number;
   overdue: number;
-}
-
-function num(v: unknown): number {
-  if (typeof v === "number") return v;
-  if (typeof v === "string") {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }
-  return 0;
 }
 
 /**
@@ -977,74 +1018,35 @@ export async function createAction(data: { customerId: string; type: string; not
 // Dashboard (vue agrégée consommée par la page Dashboard)
 // ============================================================
 
-const AGING_BUCKETS: Array<{ label: string; tone: "primary" | "secondary" | "warning" | "error" }> = [
-  { label: "0-30 J", tone: "primary" },
-  { label: "31-60 J", tone: "secondary" },
-  { label: "61-90 J", tone: "warning" },
-  { label: "90+ J", tone: "error" },
-];
-
 function str(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
-/** Agrège les données réelles du backend en un UiDashboardData consommable par la page. */
-export async function getDashboard(): Promise<UiDashboardData> {
-  const [summaryRows, agingRows, trendRows, actionDashboard, topDetteRows] = await Promise.all([
-    getDashboardSummary().catch(() => [] as ReportRow[]),
-    getDashboardAging().catch(() => [] as ReportRow[]),
-    getDashboardTrend().catch(() => [] as ReportRow[]),
-    getCollectionActionDashboard().catch(() => ({ by_status: {}, due_today: 0, overdue: 0 })),
-    getTopDetteReport().catch(() => [] as ReportRow[]),
+function num(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+  return 0;
+}
+
+export async function getDashboard(filters?: DashboardFilters): Promise<UiDashboardData> {
+  const f = filters;
+  const [summaryRows, trendRows] = await Promise.all([
+    getDashboardSummary(f).catch(() => [] as ReportRow[]),
+    getDashboardTrend(f).catch(() => [] as ReportRow[]),
   ]);
-
   const firstSummary = summaryRows[0] ?? {};
-  const encoursTotal = num(firstSummary.encours_total ?? firstSummary.total_outstanding ?? firstSummary.balance);
-  const echues = num(firstSummary.echues ?? firstSummary.overdue ?? firstSummary.overdue_amount);
-  const totalInvoiced = num(firstSummary.total_invoiced ?? firstSummary.invoiced);
-  const totalPaid = num(firstSummary.total_paid ?? firstSummary.paid);
-  const tauxRecouvrement =
-    firstSummary.taux_recouvrement != null
-      ? num(firstSummary.taux_recouvrement)
-      : totalInvoiced > 0
-        ? Math.round((totalPaid / totalInvoiced) * 100)
-        : 0;
-  const actionsEnRetard = num(actionDashboard.overdue);
-
-  const agingMap = new Map<string, number>();
-  for (const row of agingRows) {
-    const label = str(row.bucket ?? row.label ?? row.tranche ?? row.range).toLowerCase();
-    const amount = num(row.amount ?? row.montant ?? row.balance ?? row.total);
-    if (label.includes("0-30") || label.includes("0_30") || label === "0-30 j") agingMap.set("0-30 J", amount);
-    else if (label.includes("31-60") || label.includes("31_60")) agingMap.set("31-60 J", amount);
-    else if (label.includes("61-90") || label.includes("61_90")) agingMap.set("61-90 J", amount);
-    else if (label.includes("90+") || label.includes("90_plus") || label.includes(">90")) agingMap.set("90+ J", amount);
-  }
-  const aging: AgingDatum[] = AGING_BUCKETS.map((b) => {
-    const amount = agingMap.get(b.label) ?? 0;
-    const percent = encoursTotal > 0 ? Math.round((amount / encoursTotal) * 100) : 0;
-    return { label: b.label, amount, percent, tone: b.tone };
-  });
-
+  const encoursTotal = num(firstSummary.balance_globale);
+  const echues = num(firstSummary.total_impaye_mois);
+  const totalComptes = num(firstSummary.total_comptes);
+  const tauxRecouvrement = num(firstSummary.taux_recouvrement);
+  const soldeNegatif = summaryRows.reduce((acc, r) => acc + (num(r.balance_globale) < 0 ? num(r.balance_globale) : 0), 0);
   const trend = trendRows.map((r) => ({
-    month: str(r.month ?? r.mois ?? r.periode ?? r.label),
-    dette: num(r.dette ?? r.debt ?? r.balance ?? r.montant),
-    encaissement: num(r.encaissement ?? r.paid ?? r.collecte ?? r.reglement),
+    month: str(r.mois_emission),
+    dette: num(r.total_impaye),
+    encaissement: num(r.total_recouvre),
   }));
-
-  const priorities: UiPriorityItem[] = (topDetteRows ?? []).slice(0, 5).map((r) => ({
-    id: str(r.code_client ?? r.client_id ?? r.id),
-    name: str(r.raison_sociale ?? r.client ?? r.name),
-    overdue: num(r.overdue ?? r.echues ?? r.balance ?? r.montant),
-    lastActionDate: str(r.last_action_date ?? r.updated_at ?? r.date),
-    status: str(r.status ?? r.statut ?? "actif"),
-  }));
-
   return {
-    kpis: { encoursTotal, echues, tauxRecouvrement, actionsEnRetard },
-    aging,
-    trend,
-    priorities,
-    refreshedAt: new Date().toISOString(),
+    kpis: { encoursTotal, echues, tauxRecouvrement, actionsEnRetard: 0, totalComptes, soldeNegatif },
+    aging: [], trend, priorities: [], refreshedAt: new Date().toISOString(),
   };
 }

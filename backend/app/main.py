@@ -67,7 +67,7 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
 
 
 @app.get("/status")
-async def status():
+async def status_endpoint():
     return JSONResponse({"status": "ok", "version": "0.2.0"})
 
 

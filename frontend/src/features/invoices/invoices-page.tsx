@@ -137,7 +137,7 @@ export function InvoicesPage() {
               <TableBody>
                 {items.map((f) => (
                   <TableRow key={f.id}>
-                    <TableCell className="t-tabular text-primary-container">{f.number}</TableCell>
+                    <TableCell className="t-tabular text-data">{f.number}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{f.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(f.issueDate)}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(f.total)}</TableCell>
