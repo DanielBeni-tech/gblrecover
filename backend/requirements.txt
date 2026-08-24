@@ -10,3 +10,4 @@ bcrypt<4.1
 pandas
 psycopg2-binary
 openpyxl
+python-multipart

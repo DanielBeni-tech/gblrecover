@@ -20,7 +20,7 @@ services:
   backend:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.Backend
+      dockerfile: docker/backend/Dockerfile.Backend
     container_name: gblrecover-backend
     restart: unless-stopped
     environment:
@@ -36,7 +36,7 @@ services:
   frontend:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.Frontend
+      dockerfile: docker/frontend/Dockerfile.frontend
     container_name: gblrecover-frontend
     restart: unless-stopped
     environment:
