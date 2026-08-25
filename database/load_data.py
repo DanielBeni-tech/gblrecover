@@ -328,7 +328,9 @@ def main():
     print("  → Table CENTRE...")
     centres = df[['nom_centre']].drop_duplicates().dropna()
     centres = centres[centres['nom_centre'] != '']
-    centres.to_sql('centre', engine, if_exists='append', index=False)
+    with engine.begin() as conn:
+        for _, row in centres.iterrows():
+            conn.execute(text('INSERT INTO centre (nom_centre) VALUES (:nc) ON CONFLICT (nom_centre) DO NOTHING'), {'nc': row['nom_centre']})
     print(f"    ✅ {len(centres)} centres importés")
 
     print("  → Table AGENCE...")
@@ -336,21 +338,28 @@ def main():
     agences['id_agence'] = 'AG_' + agences['nom_agence'].astype(str)
     agences = agences.drop_duplicates(subset=['id_agence'])
     agences = agences[agences['nom_centre'].isin(centres['nom_centre'])]
-    agences.to_sql('agence', engine, if_exists='append', index=False)
+    with engine.begin() as conn:
+        for _, row in agences.iterrows():
+            conn.execute(text('INSERT INTO agence (id_agence, nom_agence, nom_centre) VALUES (:id, :na, :nc) ON CONFLICT (id_agence) DO NOTHING'), {'id': row['id_agence'], 'na': row['nom_agence'], 'nc': row['nom_centre']})
     print(f"    ✅ {len(agences)} agences importées")
 
     print("  → Table GESTIONNAIRE...")
     gestionnaires = df[['mat_gestionnaire', 'nom_gestionnaire']].dropna(subset=['mat_gestionnaire']).copy()
     gestionnaires['mat_gestionnaire'] = gestionnaires['mat_gestionnaire'].astype(str)
     gestionnaires = gestionnaires.drop_duplicates(subset=['mat_gestionnaire'])
-    gestionnaires.to_sql('gestionnaire', engine, if_exists='append', index=False)
+    with engine.begin() as conn:
+        for _, row in gestionnaires.iterrows():
+            conn.execute(text('INSERT INTO gestionnaire (mat_gestionnaire, nom_gestionnaire) VALUES (:mat, :nom) ON CONFLICT (mat_gestionnaire) DO NOTHING'), {'mat': row['mat_gestionnaire'], 'nom': row['nom_gestionnaire']})
     print(f"    ✅ {len(gestionnaires)} gestionnaires importés")
 
     print("  → Table CLIENT...")
     clients = df[['code_client', 'raison_sociale', 'marche', 'email', 'tel']].dropna(subset=['code_client']).copy()
     clients['code_client'] = clients['code_client'].astype(int)
     clients = clients.drop_duplicates(subset=['code_client'])
-    clients.to_sql('client', engine, if_exists='append', index=False, chunksize=2000)
+    with engine.begin() as conn:
+        for _, row in clients.iterrows():
+            conn.execute(text('INSERT INTO client (code_client, raison_sociale, marche, email, tel) VALUES (:cc, :rs, :m, :e, :t) ON CONFLICT (code_client) DO NOTHING'),
+                {'cc': int(row['code_client']), 'rs': row['raison_sociale'], 'm': row['marche'], 'e': None if pd.isna(row['email']) else row['email'], 't': None if pd.isna(row['tel']) else int(row['tel']) if isinstance(row['tel'], (int, float)) and row['tel'] == row['tel'] else None})
     print(f"    ✅ {len(clients)} clients importés")
 
     print("  → Table COMPTE...")
@@ -364,7 +373,14 @@ def main():
     comptes = comptes[comptes['mat_gestionnaire'].isin(gestionnaires['mat_gestionnaire'])]
     comptes = comptes[comptes['code_client'].isin(clients['code_client'])]
     comptes = comptes.drop_duplicates(subset=['num_compte'])
-    comptes.to_sql('compte', engine, if_exists='append', index=False, chunksize=2000)
+    with engine.begin() as conn:
+        for _, row in comptes.iterrows():
+            conn.execute(text('INSERT INTO compte (num_compte, mat_gestionnaire, id_agence, code_client, e_bill, statut_facturation, identification, balance) VALUES (:nc, :mg, :ia, :cc, :eb, :sf, :id, :bal) ON CONFLICT (num_compte) DO NOTHING'),
+                {'nc': int(row['num_compte']), 'mg': str(row['mat_gestionnaire']), 'ia': row['id_agence'], 'cc': int(row['code_client']),
+                 'eb': None if pd.isna(row['e_bill']) else row['e_bill'],
+                 'sf': None if pd.isna(row['statut_facturation']) else row['statut_facturation'],
+                 'id': None if pd.isna(row['identification']) else row['identification'],
+                 'bal': 0.0 if pd.isna(row['balance']) else float(row['balance'])})
     print(f"    ✅ {len(comptes)} comptes importés")
 
     print("  → Table SERVICE (référentiel)...")

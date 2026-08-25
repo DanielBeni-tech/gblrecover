@@ -2,8 +2,10 @@ import { useState } from "react";
 import { xafCompact } from "@/lib/format";
 
 const MONTH_LABELS: Record<string, string> = {
-  "2025-12": "Déc 25", "2026-01": "Jan 26", "2026-02": "Fév 26", "2026-03": "Mar 26",
+  "2025-11": "Nov 25", "2025-12": "Déc 25",
+  "2026-01": "Jan 26", "2026-02": "Fév 26", "2026-03": "Mar 26",
   "2026-04": "Avr 26", "2026-05": "Mai 26", "2026-06": "Juin 26",
+  "2026-07": "Juil 26",
 };
 
 function fmtMonth(raw: string): string {

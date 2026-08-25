@@ -406,6 +406,7 @@ export interface UiDashboardData {
   kpis: {
     encoursTotal: number;
     echues: number;
+    payees: number;
     tauxRecouvrement: number;
     actionsEnRetard: number;
     totalComptes: number;

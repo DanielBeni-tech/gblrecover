@@ -161,10 +161,11 @@ export function DashboardPage() {
       </Card>
 
       {/* ── KPIs ── */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard label="Nombre de comptes" value={num(kpis.totalComptes).toLocaleString("fr-FR")} />
         <KpiCard label="Encours total (créances clients)" value={xaf(kpis.encoursTotal)} />
         <KpiCard label="Créances impayées" value={xaf(kpis.echues)} tone="error" />
+        <KpiCard label="Créances payées" value={xaf(kpis.payees)} tone="success" />
         <KpiCard label="Taux de recouvrement" value={`${kpis.tauxRecouvrement.toLocaleString("fr-FR")} %`} tone={kpis.tauxRecouvrement > 50 ? "success" : kpis.tauxRecouvrement > 20 ? "warning" : "error"} />
         <KpiCard label="Solde négatif (CAMTEL doit)" value={xaf(Math.abs(kpis.soldeNegatif))} tone={kpis.soldeNegatif < 0 ? "warning" : "default"} />
       </div>

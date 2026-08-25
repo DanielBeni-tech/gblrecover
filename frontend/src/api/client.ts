@@ -1037,16 +1037,17 @@ export async function getDashboard(filters?: DashboardFilters): Promise<UiDashbo
   const firstSummary = summaryRows[0] ?? {};
   const encoursTotal = num(firstSummary.balance_globale);
   const echues = num(firstSummary.total_impaye_mois);
+  const payees = num(firstSummary.total_paye_mois);
   const totalComptes = num(firstSummary.total_comptes);
   const tauxRecouvrement = num(firstSummary.taux_recouvrement);
-  const soldeNegatif = summaryRows.reduce((acc, r) => acc + (num(r.balance_globale) < 0 ? num(r.balance_globale) : 0), 0);
+  const soldeNegatif = num(firstSummary.solde_negatif);
   const trend = trendRows.map((r) => ({
     month: str(r.mois_emission),
     dette: num(r.total_impaye),
     encaissement: num(r.total_recouvre),
   }));
   return {
-    kpis: { encoursTotal, echues, tauxRecouvrement, actionsEnRetard: 0, totalComptes, soldeNegatif },
+    kpis: { encoursTotal, echues, payees, tauxRecouvrement, actionsEnRetard: 0, totalComptes, soldeNegatif },
     aging: [], trend, priorities: [], refreshedAt: new Date().toISOString(),
   };
 }

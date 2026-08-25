@@ -794,18 +794,74 @@ def _build_view_filters(centres: list[str] | None = None, agences: list[str] | N
 
 
 async def dashboard_summary(db, centres: list[str] | None = None, agences: list[str] | None = None, mois: str | None = None):
-    where, params = _build_view_filters(centres, agences, mois, alias="v")
-    sql = f"SELECT * FROM vw_globale_portefeuille v WHERE {where}"
-    result = await db.execute(text(sql), params)
-    rows = result.mappings().all()
-    if not rows:
-        return []
-    total_comptes = sum(int(r.get("total_comptes", 0) or 0) for r in rows)
-    balance_globale = sum(float(r.get("balance_globale", 0) or 0) for r in rows)
-    total_facture_mois = sum(float(r.get("total_facture_mois", 0) or 0) for r in rows)
-    total_impaye_mois = sum(float(r.get("total_impaye_mois", 0) or 0) for r in rows)
-    taux_recouvrement = round(((total_facture_mois - total_impaye_mois) * 100.0 / total_facture_mois), 2) if total_facture_mois else 0
-    return [{"total_comptes": total_comptes, "balance_globale": balance_globale, "total_facture_mois": total_facture_mois, "total_impaye_mois": total_impaye_mois, "taux_recouvrement": taux_recouvrement}]
+    """KPI globaux — calculés directement sur les tables sans vue matérialisée."""
+    # --- filtres sur compte/agence/centre ---
+    compte_filters = []
+    params: dict = {}
+    if agences:
+        placeholders = ", ".join(f":ag_{i}" for i in range(len(agences)))
+        compte_filters.append(f"cp.id_agence IN ({placeholders})")
+        for i, a in enumerate(agences):
+            params[f"ag_{i}"] = a
+    if centres:
+        placeholders = ", ".join(f":ct_{i}" for i in range(len(centres)))
+        compte_filters.append(f"a.nom_centre IN ({placeholders})")
+        for i, c in enumerate(centres):
+            params[f"ct_{i}"] = c
+    cp_where = " AND ".join(compte_filters) if compte_filters else "1=1"
+
+    # 1. Comptes + balance (depuis la table compte)
+    sql_cp = f"""
+        SELECT
+            COUNT(DISTINCT cp.num_compte) AS total_comptes,
+            COALESCE(SUM(cp.balance), 0) AS balance_globale,
+            COALESCE(SUM(cp.balance) FILTER (WHERE cp.balance < 0), 0) AS solde_negatif
+        FROM compte cp
+        JOIN agence a ON cp.id_agence = a.id_agence
+        WHERE {cp_where}
+    """
+    row_cp = (await db.execute(text(sql_cp), params)).mappings().first()
+    total_comptes = int(row_cp["total_comptes"] or 0)
+    balance_globale = float(row_cp["balance_globale"] or 0)
+    solde_negatif = float(row_cp["solde_negatif"] or 0)
+
+    # 2. Facturation & impayés du mois
+    fac_filters = list(compte_filters)
+    if mois:
+        from datetime import date as _date
+        from calendar import monthrange
+        d = _date.fromisoformat(mois[:10])
+        _, last = monthrange(d.year, d.month)
+        fac_filters.append("f.date_emission >= :fac_start AND f.date_emission <= :fac_end")
+        params["fac_start"] = d
+        params["fac_end"] = _date(d.year, d.month, last)
+    fac_where = " AND ".join(fac_filters) if fac_filters else "1=1"
+
+    sql_fac = f"""
+        SELECT
+            COALESCE(SUM(f.montant_facture), 0) AS total_facture_mois,
+            COALESCE(SUM(f.paid_amount), 0) AS total_paye_mois,
+            COALESCE(SUM(f.outstanding_amount), 0) AS total_impaye_mois
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN agence a ON cp.id_agence = a.id_agence
+        WHERE f.status <> 'CANCELLED' AND {fac_where}
+    """
+    row_fac = (await db.execute(text(sql_fac), params)).mappings().first()
+    total_facture = float(row_fac["total_facture_mois"] or 0)
+    total_paye = float(row_fac["total_paye_mois"] or 0)
+    total_impaye = float(row_fac["total_impaye_mois"] or 0)
+    taux = round(total_paye * 100.0 / total_facture, 2) if total_facture else 0
+
+    return [{
+        "total_comptes": total_comptes,
+        "balance_globale": balance_globale,
+        "total_facture_mois": total_facture,
+        "total_paye_mois": total_paye,
+        "total_impaye_mois": total_impaye,
+        "taux_recouvrement": taux,
+        "solde_negatif": solde_negatif,
+    }]
 
 
 async def dashboard_aging(db):
@@ -814,8 +870,35 @@ async def dashboard_aging(db):
 
 
 async def dashboard_trend(db, centres: list[str] | None = None, agences: list[str] | None = None):
-    where, params = _build_view_filters(centres, agences, alias="v")
-    sql = f"SELECT v.mois_emission, SUM(v.total_facture) AS total_facture, SUM(v.total_impaye) AS total_impaye, SUM(v.total_recouvre) AS total_recouvre FROM vw_evolution_mensuelle v WHERE {where} GROUP BY v.mois_emission ORDER BY v.mois_emission ASC"
+    """Évolution mensuelle facturé / impayé / encaissé — requête directe."""
+    filters = []
+    params: dict = {}
+    if agences:
+        placeholders = ", ".join(f":ag_{i}" for i in range(len(agences)))
+        filters.append(f"a.id_agence IN ({placeholders})")
+        for i, a in enumerate(agences):
+            params[f"ag_{i}"] = a
+    if centres:
+        placeholders = ", ".join(f":ct_{i}" for i in range(len(centres)))
+        filters.append(f"a.nom_centre IN ({placeholders})")
+        for i, c in enumerate(centres):
+            params[f"ct_{i}"] = c
+    where = " AND ".join(filters) if filters else "1=1"
+
+    sql = f"""
+        SELECT
+            TO_CHAR(date_trunc('month', f.date_emission), 'YYYY-MM') AS mois_emission,
+            COALESCE(SUM(f.montant_facture), 0) AS total_facture,
+            COALESCE(SUM(f.outstanding_amount), 0) AS total_impaye,
+            COALESCE(SUM(f.paid_amount), 0) AS total_recouvre
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN agence a ON cp.id_agence = a.id_agence
+        WHERE f.status <> 'CANCELLED'
+          AND {where}
+        GROUP BY date_trunc('month', f.date_emission)
+        ORDER BY date_trunc('month', f.date_emission) ASC
+    """
     result = await db.execute(text(sql), params)
     return result.mappings().all()
 
