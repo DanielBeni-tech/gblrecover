@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,11 +9,28 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.routes import router as api_router
-from app.db.session import get_db
+from app.db.bootstrap import bootstrap_db
+from app.db.session import engine, get_db
 
 logger = logging.getLogger("gblrecover")
 
-app = FastAPI(title="GBLRecover Backend", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Au démarrage : garantit les tables d'auth et les comptes de démo.
+
+    Idempotent — aucun effet si la base est déjà provisionnée.
+    """
+    try:
+        credentials = await bootstrap_db(engine)
+        for cred in credentials:
+            logger.info("Compte de démo actif : %s", cred)
+    except Exception:
+        logger.exception("Bootstrap de l'authentification échoué (le login peut être indisponible).")
+    yield
+
+
+app = FastAPI(title="GBLRecover Backend", version="0.2.0", lifespan=lifespan)
 
 # Origines autorisées par défaut (dev local : Vite sur 5173 / 4173).
 # En production, surcharger via la variable d'env `CORS_ORIGINS` (CSV) :

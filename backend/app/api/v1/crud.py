@@ -294,6 +294,90 @@ async def deactivate_client(db: AsyncSession, client_id: int) -> bool:
     return client is not None
 
 
+async def get_clients_list(
+    db: AsyncSession,
+    q: str | None = None,
+    marche: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    """Liste paginée de clients avec agrégations en une seule requête SQL.
+
+    Retourne des dicts contenant les champs client + comptes agrégés + agence/centre/gestionnaire.
+    """
+    params: dict = {}
+    where_clauses = ["1=1"]
+
+    if q:
+        where_clauses.append("(c.raison_sociale ILIKE :q OR CAST(c.code_client AS TEXT) ILIKE :q)")
+        params["q"] = f"%{q}%"
+    if marche:
+        where_clauses.append("c.marche = :marche")
+        params["marche"] = marche
+    if centre:
+        where_clauses.append("a.nom_centre = :centre")
+        params["centre"] = centre
+    if agence:
+        where_clauses.append("co.id_agence = :agence")
+        params["agence"] = agence
+
+    where_sql = " AND ".join(where_clauses)
+
+    # DISTINCT ON pour n'avoir qu'une ligne par client (premier compte)
+    # + sous-requête agrégée pour les totaux par client
+    sql = f"""
+    SELECT
+        c.code_client,
+        c.raison_sociale,
+        c.marche,
+        c.email,
+        c.tel,
+        agg.total_balance,
+        agg.nb_comptes,
+        agg.total_outstanding,
+        agg.total_facture,
+        agg.total_paid,
+        co.id_agence,
+        a.nom_agence,
+        a.nom_centre,
+        co.mat_gestionnaire,
+        g.nom_gestionnaire,
+        co.statut_facturation,
+        co.e_bill,
+        co.identification
+    FROM client c
+    JOIN (
+        SELECT
+            co2.code_client,
+            SUM(COALESCE(co2.balance, 0)) AS total_balance,
+            COUNT(co2.num_compte) AS nb_comptes,
+            SUM(COALESCE(f.outstanding_amount, 0)) AS total_outstanding,
+            SUM(COALESCE(f.montant_facture, 0)) AS total_facture,
+            SUM(COALESCE(f.paid_amount, 0)) AS total_paid
+        FROM compte co2
+        LEFT JOIN facture f ON co2.num_compte = f.num_compte
+        GROUP BY co2.code_client
+    ) agg ON c.code_client = agg.code_client
+    JOIN (
+        SELECT DISTINCT ON (co3.code_client) co3.*
+        FROM compte co3
+        ORDER BY co3.code_client, co3.num_compte
+    ) co ON c.code_client = co.code_client
+    LEFT JOIN agence a ON co.id_agence = a.id_agence
+    LEFT JOIN gestionnaire g ON co.mat_gestionnaire = g.mat_gestionnaire
+    WHERE {where_sql}
+    ORDER BY c.raison_sociale
+    LIMIT :limit OFFSET :offset
+    """
+    params["limit"] = page_size
+    params["offset"] = (page - 1) * page_size
+
+    result = await db.execute(text(sql), params)
+    return result.mappings().all()
+
+
 async def get_client_accounts(db: AsyncSession, client_id: int):
     stmt = select(Compte).where(Compte.code_client == client_id)
     result = await db.execute(stmt)
@@ -839,9 +923,8 @@ async def dashboard_summary(db, centres: list[str] | None = None, agences: list[
 
     sql_fac = f"""
         SELECT
-            COALESCE(SUM(f.montant_facture), 0) AS total_facture_mois,
-            COALESCE(SUM(f.paid_amount), 0) AS total_paye_mois,
-            COALESCE(SUM(f.outstanding_amount), 0) AS total_impaye_mois
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) AS total_facture_mois,
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_impaye_mois
         FROM facture f
         JOIN compte cp ON f.num_compte = cp.num_compte
         JOIN agence a ON cp.id_agence = a.id_agence
@@ -849,8 +932,9 @@ async def dashboard_summary(db, centres: list[str] | None = None, agences: list[
     """
     row_fac = (await db.execute(text(sql_fac), params)).mappings().first()
     total_facture = float(row_fac["total_facture_mois"] or 0)
-    total_paye = float(row_fac["total_paye_mois"] or 0)
     total_impaye = float(row_fac["total_impaye_mois"] or 0)
+    # Convention : "payé" = facturé - impayé (source Excel sans données de paiement)
+    total_paye = max(0, total_facture - total_impaye)
     taux = round(total_paye * 100.0 / total_facture, 2) if total_facture else 0
 
     return [{
@@ -869,8 +953,18 @@ async def dashboard_aging(db):
     return result.mappings().all()
 
 
+async def get_available_months(db):
+    """Retourne les mois uniques des factures, pour alimenter le filtre du dashboard."""
+    result = await db.execute(
+        text("SELECT TO_CHAR(date_emission, 'YYYY-MM') AS value, "
+             "TRIM(TO_CHAR(date_emission, 'FMMonth YYYY')) AS label "
+             "FROM facture GROUP BY value, label ORDER BY value DESC")
+    )
+    return [{"label": r["label"], "value": r["value"]} for r in result.mappings().all()]
+
+
 async def dashboard_trend(db, centres: list[str] | None = None, agences: list[str] | None = None):
-    """Évolution mensuelle facturé / impayé / encaissé — requête directe."""
+    """Évolution mensuelle facturé / impayé / recouvré — requête directe."""
     filters = []
     params: dict = {}
     if agences:
@@ -888,9 +982,10 @@ async def dashboard_trend(db, centres: list[str] | None = None, agences: list[st
     sql = f"""
         SELECT
             TO_CHAR(date_trunc('month', f.date_emission), 'YYYY-MM') AS mois_emission,
-            COALESCE(SUM(f.montant_facture), 0) AS total_facture,
-            COALESCE(SUM(f.outstanding_amount), 0) AS total_impaye,
-            COALESCE(SUM(f.paid_amount), 0) AS total_recouvre
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) AS total_facture,
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_impaye,
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) -
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_recouvre
         FROM facture f
         JOIN compte cp ON f.num_compte = cp.num_compte
         JOIN agence a ON cp.id_agence = a.id_agence
@@ -998,10 +1093,10 @@ async def top10_indebted_clients(db, centres: list[str] | None = None, agences: 
         params["mois_end"] = mois_end
     where = " AND ".join(conditions)
     result = await db.execute(text(f"""
-        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel, COUNT(DISTINCT f.num_compte) AS nb_comptes, SUM(f.outstanding_amount) AS total_impaye, COUNT(*) AS nb_factures_impayees, MIN(f.date_emission) AS date_plus_ancienne, MAX(f.date_emission) AS date_plus_recente
-        FROM facture f JOIN compte cp ON f.num_compte = cp.num_compte JOIN client cl ON cp.code_client = cl.code_client JOIN agence ag ON cp.id_agence = ag.id_agence
+        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel, ag.nom_agence, c.nom_centre, COUNT(DISTINCT f.num_compte) AS nb_comptes, SUM(f.outstanding_amount) AS total_impaye, COUNT(*) AS nb_factures_impayees, MIN(f.date_emission) AS date_plus_ancienne, MAX(f.date_emission) AS date_plus_recente
+        FROM facture f JOIN compte cp ON f.num_compte = cp.num_compte JOIN client cl ON cp.code_client = cl.code_client JOIN agence ag ON cp.id_agence = ag.id_agence JOIN centre c ON ag.nom_centre = c.nom_centre
         WHERE {where}
-        GROUP BY cl.code_client, cl.raison_sociale, cl.marche, cl.tel ORDER BY total_impaye DESC LIMIT 10
+        GROUP BY cl.code_client, cl.raison_sociale, cl.marche, cl.tel, ag.nom_agence, c.nom_centre ORDER BY total_impaye DESC LIMIT 10
     """), params)
     return result.mappings().all()
 
@@ -1021,8 +1116,8 @@ async def top10_camtel_debts(db, centres: list[str] | None = None, agences: list
             params[f"agence_{i}"] = a
     where = " AND ".join(conditions)
     result = await db.execute(text(f"""
-        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel, cp.num_compte, cp.balance, cp.id_agence, cp.statut_facturation
-        FROM compte cp JOIN client cl ON cp.code_client = cl.code_client JOIN agence ag ON cp.id_agence = ag.id_agence
+        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel, cp.num_compte, cp.balance, ag.nom_agence, c.nom_centre, cp.statut_facturation
+        FROM compte cp JOIN client cl ON cp.code_client = cl.code_client JOIN agence ag ON cp.id_agence = ag.id_agence JOIN centre c ON ag.nom_centre = c.nom_centre
         WHERE {where}
         ORDER BY cp.balance ASC LIMIT 10
     """), params)

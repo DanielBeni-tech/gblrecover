@@ -320,6 +320,9 @@ export interface UiCustomerDetail extends UiCustomer {
   receivables: UiReceivable[];
   actions: UiCollectionAction[];
   manager: UiManager | null;
+  marche?: string;
+  eBill?: string;
+  identification?: string;
 }
 
 export interface UiAccount {

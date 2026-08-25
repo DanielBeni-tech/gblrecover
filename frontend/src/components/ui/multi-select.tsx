@@ -9,11 +9,15 @@ interface MultiSelectProps {
   onChange: (selected: string[]) => void;
   placeholder?: string;
   className?: string;
+  /** Résout un libellé lisible à partir d'une valeur (ex: id_agence -> nom_agence). */
+  getLabel?: (value: string) => string;
 }
 
-export function MultiSelect({ label, options, selected, onChange, placeholder = "Tous", className }: MultiSelectProps) {
+export function MultiSelect({ label, options, selected, onChange, placeholder = "Tous", className, getLabel }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const labelOf = (v: string) => (getLabel ? getLabel(v) : v);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -81,7 +85,7 @@ export function MultiSelect({ label, options, selected, onChange, placeholder = 
                 )}>
                   {isSelected && <Check className="h-3 w-3" />}
                 </div>
-                <span className="truncate">{opt}</span>
+                <span className="truncate">{labelOf(opt)}</span>
               </button>
             );
           })}
@@ -92,7 +96,7 @@ export function MultiSelect({ label, options, selected, onChange, placeholder = 
         <div className="mt-1.5 flex flex-wrap gap-1">
           {selected.map((s) => (
             <span key={s} className="inline-flex items-center gap-1 rounded-full bg-primary-container px-2 py-0.5 text-[10px] font-medium text-on-primary-container">
-              {s}
+              {labelOf(s)}
               <X className="h-2.5 w-2.5 cursor-pointer hover:text-error" onClick={() => toggle(s)} />
             </span>
           ))}

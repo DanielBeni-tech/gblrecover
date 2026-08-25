@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, ArrowRight, Building2, CalendarClock, CheckCircle2, Mail, MessageSquare, Phone } from "lucide-react";
 import { createAction, getCustomer } from "@/api/client";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge, customerStatusLabel, customerStatusTone, invoiceStatusLabel, invoiceStatusTone, paymentStatusLabel, paymentStatusTone, receivableStatusLabel, receivableStatusTone } from "@/components/ui/badge";
+import { Badge, customerStatusLabel, customerStatusTone, paymentStatusLabel, paymentStatusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -109,7 +109,9 @@ export function CustomerDetailPage() {
                 <Building2 className="h-3 w-3" /> Agence : {customer.agency}
               </span>
               <span className="text-[12px] text-on-surface-variant">
-                {customer.type === "entreprise" ? "Entreprise" : customer.type === "etat" ? "État" : "Particulier"} · {customer.center}
+                {customer.marche || "—"} · {customer.center || "—"}
+                {customer.eBill && <> · E-Bill: {customer.eBill}</>}
+                {customer.identification && <> · {customer.identification}</>}
               </span>
             </div>
           </div>
@@ -164,8 +166,6 @@ export function CustomerDetailPage() {
                     <p className="t-label text-on-surface-variant">Adresse</p>
                     <p className="mt-1 text-[14px] text-on-surface">
                       {customer.address || "—"}
-                      <br />
-                      {customer.city}
                     </p>
                   </div>
                 </div>
@@ -179,8 +179,7 @@ export function CustomerDetailPage() {
                 <div className="flex items-start gap-3">
                   <Phone className="mt-0.5 h-4 w-4 text-on-surface-variant" />
                   <div>
-                    <p className="t-label text-on-surface-variant">Téléphone</p>
-                    <p className="t-tabular mt-1 text-on-surface">{customer.phone}</p>
+                    <p className="t-label text-on-surface-variant">Téléphone</p>                      <p className="t-tabular mt-1 text-on-surface">{customer.phone || "—"}</p>
                   </div>
                 </div>
               </CardContent>
@@ -259,8 +258,9 @@ export function CustomerDetailPage() {
                   <TableHead>Agence</TableHead>
                   <TableHead>Centre</TableHead>
                   <TableHead>Gestionnaire</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="text-right">Solde</TableHead>
+                  <TableHead>E-Bill</TableHead>
+                  <TableHead>Statut facturation</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
                 </tr>
               </TableHeader>
               <TableBody>
@@ -270,11 +270,7 @@ export function CustomerDetailPage() {
                     <TableCell className="text-on-surface-variant">{a.agency}</TableCell>
                     <TableCell className="text-on-surface-variant">{a.center}</TableCell>
                     <TableCell className="text-on-surface-variant">{customer.manager?.name ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge tone={a.status === "actif" ? "success" : a.status === "suspendu" ? "warning" : "neutral"}>
-                        {a.status === "actif" ? "Actif" : a.status === "suspendu" ? "Suspendu" : "Clôturé"}
-                      </Badge>
-                    </TableCell>
+                    <TableCell className="text-on-surface-variant">{a.status === "En cours" ? "En cours" : a.status === "Arrêt" ? "Arrêt" : (a.status || "—")}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(a.balance)}</TableCell>
                   </TableRow>
                 ))}
@@ -292,11 +288,9 @@ export function CustomerDetailPage() {
                 <tr>
                   <TableHead>Numéro</TableHead>
                   <TableHead>Compte</TableHead>
-                  <TableHead>Émission</TableHead>
-                  <TableHead>Échéance</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Réglé</TableHead>
-                  <TableHead className="text-right">Solde</TableHead>
+                  <TableHead>Période</TableHead>
+                  <TableHead className="text-right">Facturé</TableHead>
+                  <TableHead className="text-right">Impayé</TableHead>
                   <TableHead>Statut</TableHead>
                 </tr>
               </TableHeader>
@@ -306,14 +300,12 @@ export function CustomerDetailPage() {
                     <TableCell className="t-tabular text-data">{f.number}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{f.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(f.issueDate)}</TableCell>
-                    <TableCell className="t-tabular text-on-surface-variant">{dateFr(f.dueDate)}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(f.total)}</TableCell>
-                    <TableCell className="t-tabular text-right text-success">{xaf(f.paid)}</TableCell>
-                    <TableCell className={`t-tabular text-right font-semibold ${f.total - f.paid > 0 ? "text-error" : "text-on-surface"}`}>
+                    <TableCell className={`t-tabular text-right font-semibold ${(f.total - f.paid) > 0 ? "text-error" : "text-on-surface"}`}>
                       {xaf(f.total - f.paid)}
                     </TableCell>
                     <TableCell>
-                      <Badge tone={invoiceStatusTone[f.status]}>{invoiceStatusLabel[f.status]}</Badge>
+                      <Badge tone={(f.total - f.paid) > 0 ? "error" : "success"}>{(f.total - f.paid) > 0 ? "Impayée" : "Payée"}</Badge>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -326,32 +318,40 @@ export function CustomerDetailPage() {
       {tab === "paiements" && (
         <Card>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <tr>
-                  <TableHead>Référence</TableHead>
-                  <TableHead>Compte</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Montant</TableHead>
-                  <TableHead className="text-right">Imputé</TableHead>
-                  <TableHead>Statut</TableHead>
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {customer.payments.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="t-tabular text-data">{p.reference}</TableCell>
-                    <TableCell className="t-tabular text-on-surface-variant">{p.accountNumber}</TableCell>
-                    <TableCell className="t-tabular text-on-surface-variant">{dateFr(p.date)}</TableCell>
-                    <TableCell className="t-tabular text-right">{xaf(p.amount)}</TableCell>
-                    <TableCell className="t-tabular text-right text-success">{xaf(p.allocated)}</TableCell>
-                    <TableCell>
-                      <Badge tone={paymentStatusTone[p.status]}>{paymentStatusLabel[p.status]}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            {customer.payments.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-12 text-center">
+                <p className="text-[15px] font-semibold text-on-surface">Aucune donnée de paiement</p>
+                <p className="max-w-md text-[13px] text-on-surface-variant">
+                  La source de données Excel ne contient pas d'information de paiement.
+                  Les paiements seront disponibles une fois intégrés depuis le système financier.
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <tr>
+                    <TableHead>Référence</TableHead>
+                    <TableHead>Compte</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Montant</TableHead>
+                    <TableHead>Statut</TableHead>
+                  </tr>
+                </TableHeader>
+                <TableBody>
+                  {customer.payments.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="t-tabular text-data">{p.reference}</TableCell>
+                      <TableCell className="t-tabular text-on-surface-variant">{p.accountNumber}</TableCell>
+                      <TableCell className="t-tabular text-on-surface-variant">{dateFr(p.date)}</TableCell>
+                      <TableCell className="t-tabular text-right">{xaf(p.amount)}</TableCell>
+                      <TableCell>
+                        <Badge tone={paymentStatusTone[p.status] ?? "neutral"}>{paymentStatusLabel[p.status] ?? p.status}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </Card>
       )}
@@ -383,7 +383,7 @@ export function CustomerDetailPage() {
                     <TableCell className="t-tabular text-on-surface-variant">{r.ageDays} j</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(r.dueDate)}</TableCell>
                     <TableCell>
-                      <Badge tone={receivableStatusTone[r.status]}>{receivableStatusLabel[r.status]}</Badge>
+                      <Badge tone={r.status === "urgente" ? "error" : r.status === "en_retard" ? "warning" : "success"}>{r.status === "urgente" ? "Urgente" : r.status === "en_retard" ? "En retard" : "Normale"}</Badge>
                     </TableCell>
                   </TableRow>
                 ))}

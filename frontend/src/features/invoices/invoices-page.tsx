@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listInvoices } from "@/api/client";
+import { listInvoices, listInvoicesCountFiltered } from "@/api/client";
 import type { Invoice } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Badge, invoiceStatusLabel, invoiceStatusTone } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { xaf, dateFr } from "@/lib/format";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 50;
+
+const invoiceStatusLabel: Record<string, string> = { OPEN: "Impayée", PAID: "Payée" };
 
 interface InvoiceRow {
   id: string;
@@ -30,6 +32,9 @@ interface InvoiceRow {
 function toRow(inv: Invoice): InvoiceRow {
   const total = inv.montant_facture ?? 0;
   const paid = inv.paid_amount ?? 0;
+  const outstanding = inv.outstanding_amount ?? total - paid;
+  // Statut dérivé : "Impayée" si outstanding > 0, "Payée" sinon
+  const derivedStatus = outstanding > 0 ? "OPEN" : "PAID";
   return {
     id: inv.id_facture,
     number: inv.id_facture,
@@ -37,7 +42,7 @@ function toRow(inv: Invoice): InvoiceRow {
     issueDate: inv.date_emission ?? "",
     total,
     paid,
-    status: inv.status ?? "—",
+    status: derivedStatus,
   };
 }
 
@@ -67,6 +72,12 @@ export function InvoicesPage() {
     queryFn: () => listInvoices({ status: filters.status, page: filters.page, pageSize: filters.pageSize }),
   });
 
+  // Count total for real pagination
+  const { data: countData } = useQuery({
+    queryKey: ["invoices-count", status],
+    queryFn: () => listInvoicesCountFiltered({ status: status || undefined }),
+  });
+
   const items = (data ?? [])
     .map(toRow)
     .filter((row) => {
@@ -74,6 +85,8 @@ export function InvoicesPage() {
       const q = debounced.toLowerCase();
       return row.number.toLowerCase().includes(q) || row.accountNumber.toLowerCase().includes(q);
     });
+
+  const totalCount = countData?.total ?? 0;
 
   return (
     <>
@@ -101,7 +114,7 @@ export function InvoicesPage() {
       <Card className="overflow-hidden">
         <div className="border-b border-outline-variant bg-surface px-4 py-2.5">
           <p className="text-[16px] font-semibold text-on-surface">
-            {items.length.toLocaleString("fr-FR")} <span className="text-[14px] font-normal text-on-surface-variant">factures affichées</span>
+            {totalCount.toLocaleString("fr-FR")} <span className="text-[14px] font-normal text-on-surface-variant">factures au total — page {page}</span>
           </p>
         </div>
         {isLoading ? (
@@ -127,10 +140,9 @@ export function InvoicesPage() {
                 <tr>
                   <TableHead>Numéro</TableHead>
                   <TableHead>Compte</TableHead>
-                  <TableHead>Émission</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Réglé</TableHead>
-                  <TableHead className="text-right">Solde</TableHead>
+                  <TableHead>Période</TableHead>
+                  <TableHead className="text-right">Facturé</TableHead>
+                  <TableHead className="text-right">Impayé</TableHead>
                   <TableHead>Statut</TableHead>
                 </tr>
               </TableHeader>
@@ -141,12 +153,11 @@ export function InvoicesPage() {
                     <TableCell className="t-tabular text-on-surface-variant">{f.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(f.issueDate)}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(f.total)}</TableCell>
-                    <TableCell className="t-tabular text-right text-success">{xaf(f.paid)}</TableCell>
                     <TableCell className={`t-tabular text-right font-semibold ${f.total - f.paid > 0 ? "text-error" : "text-on-surface"}`}>
                       {xaf(f.total - f.paid)}
                     </TableCell>
                     <TableCell>
-                      <Badge tone={invoiceStatusTone[f.status] ?? "neutral"}>{invoiceStatusLabel[f.status] ?? f.status}</Badge>
+                      <Badge tone={f.status === "PAID" ? "success" : "error"}>{f.status === "PAID" ? "Payée" : "Impayée"}</Badge>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -154,8 +165,8 @@ export function InvoicesPage() {
             </Table>
           </div>
         )}
-        {data && data.length > 0 && (
-          <Pagination page={page} pageSize={PAGE_SIZE} total={data.length} onChange={setPage} />
+        {totalCount > 0 && (
+          <Pagination page={page} pageSize={PAGE_SIZE} total={totalCount} onChange={setPage} />
         )}
       </Card>
     </>

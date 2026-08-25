@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { AlertTriangle, RefreshCw, Filter, TrendingDown, TrendingUp } from "lucide-react";
-import { getDashboard, getTopIndebtedClients, getCamtelDebts, listCentres, listAgencies } from "@/api/client";
+import { getDashboard, getTopIndebtedClients, getCamtelDebts, listCentres, listAgencies, getAvailableMonths } from "@/api/client";
 import type { DashboardFilters } from "@/api/client";
 import type { ReportRow } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -26,22 +26,25 @@ function str(v: unknown): string {
   return v == null ? "" : String(v).trim();
 }
 
-const AVAILABLE_MONTHS = [
-  { label: "Tous les mois", value: "" },
-  { label: "Juin 2026", value: "2026-06-01" },
-  { label: "Mai 2026", value: "2026-05-01" },
-  { label: "Avril 2026", value: "2026-04-01" },
-  { label: "Mars 2026", value: "2026-03-01" },
-  { label: "Février 2026", value: "2026-02-01" },
-  { label: "Janvier 2026", value: "2026-01-01" },
-  { label: "Décembre 2025", value: "2025-12-01" },
-];
-
 export function DashboardPage() {
   const [selectedCentres, setSelectedCentres] = useState<string[]>([]);
   const [selectedAgences, setSelectedAgences] = useState<string[]>([]);
-  const [selectedMois, setSelectedMois] = useState("2026-06-01");
-  const [appliedFilters, setAppliedFilters] = useState<DashboardFilters>({ mois: "2026-06-01" });
+  const [selectedMois, setSelectedMois] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState<DashboardFilters>({});
+
+  const { data: monthsData } = useQuery({
+    queryKey: ["available-months"],
+    queryFn: () => getAvailableMonths(),
+    staleTime: 600_000,
+  });
+
+  const availableMonths = [
+    { label: "Tous les mois", value: "" },
+    ...(monthsData ?? []).map((m) => ({
+      label: String(m.label ?? ""),
+      value: String(m.value ?? ""),
+    })),
+  ];
 
   const { data: centresData } = useQuery({
     queryKey: ["centres-list"],
@@ -56,9 +59,18 @@ export function DashboardPage() {
   });
 
   const allCentres = (centresData ?? []).map((c) => c.nom_centre).sort();
-  const filteredAgenceNames = selectedCentres.length === 0
-    ? (agencesData ?? []).map((a) => a.nom_agence ?? a.id_agence).sort()
-    : (agencesData ?? []).filter((a) => selectedCentres.includes(a.nom_centre)).map((a) => a.nom_agence ?? a.id_agence).sort();
+
+  // Carte id_agence -> nom_agence pour l'affichage lisible.
+  const agencyLabelById = new Map<string, string>(
+    (agencesData ?? []).map((a) => [a.id_agence, a.nom_agence ?? a.id_agence]),
+  );
+
+  // Agences proposées : restreintes au(x) centre(s) sélectionné(s).
+  const filteredAgencies = (agencesData ?? [])
+    .filter((a) => selectedCentres.length === 0 || selectedCentres.includes(a.nom_centre))
+    .sort((x, y) => (x.nom_agence ?? x.id_agence).localeCompare(y.nom_agence ?? y.id_agence));
+  const filteredAgenceIds = filteredAgencies.map((a) => a.id_agence);
+  const agencyName = (id: string) => agencyLabelById.get(id) ?? id;
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["dashboard", appliedFilters],
@@ -91,8 +103,8 @@ export function DashboardPage() {
   function handleReset() {
     setSelectedCentres([]);
     setSelectedAgences([]);
-    setSelectedMois("2026-06-01");
-    setAppliedFilters({ mois: "2026-06-01" });
+    setSelectedMois("");
+    setAppliedFilters({});
   }
 
   if (isLoading) {
@@ -145,11 +157,11 @@ export function DashboardPage() {
           </div>
           <div className="flex flex-wrap items-end gap-4">
             <MultiSelect label="Centre" options={allCentres} selected={selectedCentres} onChange={(v) => { setSelectedCentres(v); setSelectedAgences([]); }} placeholder="Tous les centres" className="min-w-[220px] flex-1" />
-            <MultiSelect label="Agence" options={filteredAgenceNames} selected={selectedAgences} onChange={setSelectedAgences} placeholder="Toutes les agences" className="min-w-[220px] flex-1" />
+            <MultiSelect label="Agence" options={filteredAgenceIds} selected={selectedAgences} onChange={setSelectedAgences} getLabel={agencyName} placeholder="Toutes les agences" className="min-w-[220px] flex-1" />
             <div className="min-w-[180px] flex-1">
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">Mois</label>
               <Select value={selectedMois} onChange={(e) => setSelectedMois(e.target.value)}>
-                {AVAILABLE_MONTHS.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
+                {availableMonths.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
               </Select>
             </div>
             <div className="flex gap-2 pb-0.5">
@@ -234,7 +246,7 @@ export function DashboardPage() {
                   <TableCell className="t-tabular text-data font-medium"><Link to={`/clients/${row.code_client}`} className="hover:underline">{str(row.code_client)}</Link></TableCell>
                   <TableCell className="t-tabular">{str(row.num_compte)}</TableCell>
                   <TableCell>{str(row.marche)}</TableCell>
-                  <TableCell className="text-[12px] text-on-surface-variant max-w-[180px] truncate">{str(row.id_agence)}</TableCell>
+                  <TableCell className="text-[12px] text-on-surface-variant max-w-[180px] truncate">{str(row.nom_agence)}</TableCell>
                   <TableCell className="t-tabular text-right font-bold text-warning">{xaf(Math.abs(num(row.balance)))}</TableCell>
                   <TableCell>{str(row.statut_facturation)}</TableCell>
                   <TableCell className="text-right"><Link to={`/clients/${row.code_client}`} className="t-label text-primary hover:underline">Ouvrir</Link></TableCell>
