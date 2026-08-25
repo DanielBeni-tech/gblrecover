@@ -406,8 +406,11 @@ export interface UiDashboardData {
   kpis: {
     encoursTotal: number;
     echues: number;
+    payees: number;
     tauxRecouvrement: number;
     actionsEnRetard: number;
+    totalComptes: number;
+    soldeNegatif: number;
   };
   aging: AgingDatum[];
   trend: Array<{ month: string; dette: number; encaissement: number }>;

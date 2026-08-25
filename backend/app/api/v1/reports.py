@@ -20,10 +20,15 @@ router = APIRouter()
 
 @router.get("/dashboards/summary", response_model=List[schemas.ReportRow])
 async def dashboard_summary(
+    centres: str | None = Query(None, description="Comma-separated centre names"),
+    agences: str | None = Query(None, description="Comma-separated agency IDs"),
+    mois: str | None = Query(None, description="Month date YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    return await crud.dashboard_summary(db)
+    c = [x.strip() for x in centres.split(",")] if centres else None
+    a = [x.strip() for x in agences.split(",")] if agences else None
+    return await crud.dashboard_summary(db, centres=c, agences=a, mois=mois)
 
 
 @router.get("/dashboards/aging", response_model=List[schemas.ReportRow])
@@ -36,10 +41,14 @@ async def dashboard_aging(
 
 @router.get("/dashboards/trend", response_model=List[schemas.ReportRow])
 async def dashboard_trend(
+    centres: str | None = Query(None, description="Comma-separated centre names"),
+    agences: str | None = Query(None, description="Comma-separated agency IDs"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    return await crud.dashboard_trend(db)
+    c = [x.strip() for x in centres.split(",")] if centres else None
+    a = [x.strip() for x in agences.split(",")] if agences else None
+    return await crud.dashboard_trend(db, centres=c, agences=a)
 
 
 @router.get("/dashboards/activity", response_model=List[schemas.ReportRow])
@@ -125,7 +134,6 @@ async def reports_zombies(
 
 @router.get(
     "/reports/export/csv",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
 )
 async def export_report_csv(
     report: str = Query(...),
@@ -134,3 +142,32 @@ async def export_report_csv(
 ):
     """Exporte un rapport en CSV. Squelette — implémentation en attente."""
     raise NotImplementedError("TODO: implement CSV export — see §3.10")
+
+
+# ============================================================
+# Analytics décisionnels
+# ============================================================
+
+@router.get("/dashboards/top-indebted", response_model=List[schemas.ReportRow])
+async def dashboard_top_indebted(
+    centres: str | None = Query(None, description="Comma-separated centre names"),
+    agences: str | None = Query(None, description="Comma-separated agency IDs"),
+    mois: str | None = Query(None, description="Month date YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    c = [x.strip() for x in centres.split(",")] if centres else None
+    a = [x.strip() for x in agences.split(",")] if agences else None
+    return await crud.top10_indebted_clients(db, centres=c, agences=a, mois=mois)
+
+
+@router.get("/dashboards/camtel-debts", response_model=List[schemas.ReportRow])
+async def dashboard_camtel_debts(
+    centres: str | None = Query(None, description="Comma-separated centre names"),
+    agences: str | None = Query(None, description="Comma-separated agency IDs"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    c = [x.strip() for x in centres.split(",")] if centres else None
+    a = [x.strip() for x in agences.split(",")] if agences else None
+    return await crud.top10_camtel_debts(db, centres=c, agences=a)

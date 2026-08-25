@@ -22,7 +22,6 @@ async def list_services(
 @router.get(
     "/services/{type_service}",
     response_model=schemas.ServiceRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
 )
 async def read_service(type_service: str, db: AsyncSession = Depends(get_db)):
     return await crud.get_service(db, type_service)

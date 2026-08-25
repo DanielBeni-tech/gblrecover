@@ -32,9 +32,7 @@ async def list_account_collection_actions(
 
 @router.post(
     "/accounts/{account_id}/collection-actions",
-    response_model=schemas.CollectionActionRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.CollectionActionRead)
 async def create_account_collection_action(
     account_id: int,
     payload: schemas.CollectionActionCreate,
@@ -59,9 +57,7 @@ async def list_account_promises(
 
 @router.post(
     "/accounts/{account_id}/promises",
-    response_model=schemas.PromiseRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.PromiseRead)
 async def create_account_promise(
     account_id: int,
     payload: schemas.PromiseCreate,
@@ -105,9 +101,7 @@ async def read_collection_action(action_id: UUID, db: AsyncSession = Depends(get
 
 @router.post(
     "/collection-actions",
-    response_model=schemas.CollectionActionRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.CollectionActionRead)
 async def create_collection_action(
     payload: schemas.CollectionActionCreate,
     current_user=Depends(get_current_user),
@@ -118,9 +112,7 @@ async def create_collection_action(
 
 @router.patch(
     "/collection-actions/{action_id}",
-    response_model=schemas.CollectionActionRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.CollectionActionRead)
 async def update_collection_action(
     action_id: UUID,
     payload: schemas.CollectionActionUpdate,
@@ -147,9 +139,7 @@ async def list_promises(
 
 @router.post(
     "/promises/{promise_id}/keep",
-    response_model=schemas.PromiseRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.PromiseRead)
 async def keep_promise(
     promise_id: UUID,
     current_user=Depends(get_current_user),
@@ -163,9 +153,7 @@ async def keep_promise(
 
 @router.post(
     "/promises/{promise_id}/break",
-    response_model=schemas.PromiseRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.PromiseRead)
 async def break_promise(
     promise_id: UUID,
     current_user=Depends(get_current_user),

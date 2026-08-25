@@ -109,7 +109,16 @@ async def read_invoices(
     page_size: int = Query(25, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    return await crud.get_invoices(db, page=page, page_size=page_size)
+    return await crud.get_invoices(db, status=status, page=page, page_size=page_size)
+
+
+@router.get("/invoices/count")
+async def count_invoices(
+    status: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return {"total": await crud.count_invoices_filtered(db, status=status)}
 
 
 @router.get("/invoices/{invoice_id}", response_model=schemas.InvoiceRead)
@@ -122,9 +131,7 @@ async def read_invoice(invoice_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post(
     "/invoices",
-    response_model=schemas.InvoiceRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.InvoiceRead)
 async def create_invoice(
     invoice_in: schemas.InvoiceCreate,
     current_user=Depends(get_current_user),
@@ -135,9 +142,7 @@ async def create_invoice(
 
 @router.patch(
     "/invoices/{invoice_id}",
-    response_model=schemas.InvoiceRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.InvoiceRead)
 async def update_invoice(
     invoice_id: str,
     invoice_in: schemas.InvoiceUpdate,
@@ -148,9 +153,7 @@ async def update_invoice(
 
 
 @router.delete(
-    "/invoices/{invoice_id}",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    "/invoices/{invoice_id}")
 async def cancel_invoice(
     invoice_id: str,
     current_user=Depends(get_current_user),
@@ -173,9 +176,7 @@ async def invoice_payments(
 
 @router.post(
     "/invoices/{invoice_id}/payments",
-    response_model=schemas.AllocationRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.AllocationRead)
 async def allocate_payment_via_invoice(
     invoice_id: str,
     payload: schemas.AllocationCreate,
@@ -200,7 +201,7 @@ async def read_payments(
     page_size: int = Query(25, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    return await crud.get_payments(db, page=page, page_size=page_size)
+    return await crud.get_payments(db, status=status, page=page, page_size=page_size)
 
 
 @router.get("/payments/unallocated", response_model=List[schemas.PaymentRead])
@@ -212,6 +213,14 @@ async def unallocated_payments(
     return await crud.get_unallocated_payments(db, page=page, page_size=page_size)
 
 
+@router.get("/payments/count")
+async def count_payments(
+    status: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return {"total": await crud.count_payments_filtered(db, status=status)}
+
 @router.get("/payments/{payment_id}", response_model=schemas.PaymentRead)
 async def read_payment(payment_id: str, db: AsyncSession = Depends(get_db)):
     p = await crud.get_payment(db, payment_id)
@@ -222,9 +231,7 @@ async def read_payment(payment_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post(
     "/payments",
-    response_model=schemas.PaymentRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.PaymentRead)
 async def create_payment(
     payment_in: schemas.PaymentCreate,
     current_user=Depends(get_current_user),
@@ -235,9 +242,7 @@ async def create_payment(
 
 @router.patch(
     "/payments/{payment_id}",
-    response_model=schemas.PaymentRead,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.PaymentRead)
 async def update_payment(
     payment_id: str,
     payment_in: schemas.PaymentUpdate,
@@ -248,9 +253,7 @@ async def update_payment(
 
 
 @router.delete(
-    "/payments/{payment_id}",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    "/payments/{payment_id}")
 async def cancel_payment(
     payment_id: str,
     current_user=Depends(get_current_user),
@@ -263,9 +266,7 @@ async def cancel_payment(
 
 @router.post(
     "/payments/{payment_id}/allocations",
-    response_model=List[schemas.AllocationRead],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=List[schemas.AllocationRead])
 async def create_payment_allocations(
     payment_id: str,
     allocations: List[schemas.AllocationCreate],
@@ -276,9 +277,7 @@ async def create_payment_allocations(
 
 
 @router.delete(
-    "/allocations/{allocation_id}",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    "/allocations/{allocation_id}")
 async def delete_allocation(
     allocation_id,
     current_user=Depends(get_current_user),
@@ -287,3 +286,28 @@ async def delete_allocation(
     ok = await crud.delete_allocation(db, allocation_id)
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allocation not found")
+
+
+# ============================================================
+
+@router.get("/receivables", response_model=List[schemas.ReportRow])
+async def list_receivables(
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await crud.get_receivables(db, q=q, status=status, page=page, page_size=page_size)
+
+
+@router.get("/receivables/count")
+async def count_receivables(
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return {"total": await crud.count_receivables_filtered(db, q=q, status=status)}
+

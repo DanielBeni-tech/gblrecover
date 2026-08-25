@@ -107,7 +107,7 @@ export function PaymentsPage() {
               <TableBody>
                 {items.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="t-tabular text-primary-container">{p.reference}</TableCell>
+                    <TableCell className="t-tabular text-data">{p.reference}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{p.invoiceId}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(p.date)}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(p.amount)}</TableCell>
