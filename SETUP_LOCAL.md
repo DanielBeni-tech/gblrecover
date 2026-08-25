@@ -15,6 +15,33 @@ npm --version
 
 ---
 
+## Lancement rapide (recommandé)
+
+L'environnement local se met en place **en une commande** :
+
+```bash
+./scripts/start_local.sh            # base + backend (+ frontend, optionnel : --all)
+```
+
+Ce script :
+1. Démarre un **cluster PostgreSQL dédié au projet** (`~/.gblrecover`, port **5433**,
+   superuser `postgres` / mot de passe `postgres`) s'il n'est pas déjà actif ;
+2. Applique le schéma officiel `database/schema.sql` + les vues `database/views.sql` ;
+3. Sème les rôles `AGENT`/`ADMIN` et les comptes de démo ;
+4. Démarre le backend FastAPI sur `http://localhost:8000` (et le frontend sur `:5173` avec `--all`).
+
+Des **services systemd utilisateur** (`gblrecover-postgres`, `gblrecover-backend`) sont
+également installés : la base et l'API redémarrent automatiquement à la session.
+
+```bash
+systemctl --user status gblrecover-postgres gblrecover-backend
+```
+
+> 💡 Historique des données : `database/GBL - Juillet 2026.xlsx` (réel, 13 Mo) peut être
+> (re)chargé avec `python3 database/load_fast.py` (PORT 5433, MDP `postgres`).
+
+---
+
 ## Option 1 : Avec PostgreSQL local (Recommandé)
 
 ### 1. Installer PostgreSQL
@@ -137,6 +164,30 @@ Puis relance le backend comme avant ✅
 | Backend | http://localhost:8000 | Doit afficher un message JSON |
 | Backend Status | http://localhost:8000/status | `{"status": "ok", "version": "0.2.0"}` |
 | DB Health | http://localhost:8000/health/db | `{"db": "ok"}` |
+
+---
+
+## Comptes de démonstration
+
+Au **démarrage du backend**, un bootstrap automatique (`backend/app/db/bootstrap.py`)
+crée (si absentes) les tables d'authentification `users`, `roles`, `user_roles`,
+`permissions`, `role_permissions`, puis provisionne les comptes de démo :
+
+| Rôle | E-mail | Mot de passe |
+|------|--------|--------------|
+| Agent | `agent@camtel.cm` | `demo1234` |
+| Administrateur | `admin@camtel.cm` | `admin1234` |
+
+Ce bootstrap est **idempotent** : à chaque démarrage, il réinitialise le mot de
+passe de ces comptes à la valeur ci-dessus. À lancer aussi à la main :
+
+```powershell
+cd backend
+python -m scripts.seed_demo
+```
+
+> L'interface de connexion attend un **e-mail** + **mot de passe**
+> (`POST /api/v1/auth/login`).
 
 ---
 

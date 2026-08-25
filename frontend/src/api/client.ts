@@ -39,6 +39,7 @@ import {
   type UiManager,
   type UiPayment,
   type UiReceivable,
+  type CustomerType,
 } from "@/api/types";
 
 /** URL de base et préfixe versionné depuis .env (Vite expose VITE_*). */
@@ -737,6 +738,10 @@ export function getCamtelDebts(filters?: { centres?: string; agences?: string })
   return apiRequest<ReportRow[]>("/dashboards/camtel-debts", { query: qs({ centres: filters?.centres, agences: filters?.agences }) });
 }
 
+export function getAvailableMonths(): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/available-months");
+}
+
 // ============================================================
 // Administration & Qualité (§3.11)
 // ============================================================
@@ -803,6 +808,7 @@ export interface UiCustomerSummary {
   status: string;
   balance: number;
   overdue: number;
+  marche: string;
 }
 
 /**
@@ -811,13 +817,13 @@ export interface UiCustomerSummary {
  * /summary par client pour dériver balance / overdue.
  */
 export async function searchCustomers(
-  filters: { query?: string; agency?: string; center?: string; status?: string },
+  filters: { query?: string; agency?: string; center?: string; marche?: string },
   page: number,
   pageSize: number,
 ): Promise<{ total: number; items: UiCustomerSummary[] }> {
   const [pageRows, probe] = await Promise.all([
-    listClients({ q: filters.query, status: filters.status, marche: undefined, page, pageSize }),
-    listClients({ q: filters.query, status: filters.status, page: 1, pageSize: 200 }),
+    listClients({ q: filters.query, marche: filters.marche, page, pageSize }),
+    listClients({ q: filters.query, marche: filters.marche, page: 1, pageSize: 200 }),
   ]);
 
   const items = await Promise.all(
@@ -825,28 +831,45 @@ export async function searchCustomers(
       const accounts = await getClientAccounts(c.code_client).catch(() => []);
       const first = accounts[0];
       const summary = await getClientSummary(c.code_client).catch(() => null);
+
+      // Résoudre nom_agence et nom_centre via les référentiels
+      let agencyName = first?.id_agence ?? "";
+      let centreName = "";
+      let managerName = "";
+
+      try {
+        const ag = await getAgency(first?.id_agence ?? "");
+        agencyName = ag.nom_agence ?? ag.id_agence;
+        centreName = ag.nom_centre;
+      } catch {
+        // fallback: id_agence brut
+      }
+
+      if (first?.mat_gestionnaire) {
+        try {
+          const m = await getManager(first.mat_gestionnaire);
+          managerName = m.nom_gestionnaire;
+        } catch {
+          managerName = "";
+        }
+      }
+
       const out: UiCustomerSummary = {
         id: String(c.code_client),
         name: c.raison_sociale,
-        type: c.marche === "ETAT" ? "etat" : c.marche === "PARTICULIER" ? "particulier" : "entreprise",
+        type: c.marche ?? "",
         phone: c.tel ? String(c.tel) : "",
         email: c.email ?? "",
-        agency: first?.id_agence ?? "",
-        center: "",
+        agency: agencyName,
+        center: centreName,
         managerId: first?.mat_gestionnaire ?? "",
-        managerName: "",
-        status: first?.statut_facturation ?? "actif",
+        managerName,
+        status: first?.statut_facturation ?? "",
         balance: num(summary?.total_balance ?? first?.balance),
         overdue: num(summary?.total_outstanding),
+        marche: c.marche ?? "",
       };
-      if (out.managerId) {
-        try {
-          const m = await getManager(out.managerId);
-          out.managerName = m.nom_gestionnaire;
-        } catch {
-          out.managerName = "";
-        }
-      }
+
       // Filtres supplémentaires (agency/center) qui ne sont pas portés par /clients
       if (filters.agency && out.agency !== filters.agency) return null;
       if (filters.center && out.center !== filters.center) return null;
@@ -961,29 +984,43 @@ export async function getCustomer(id: string): Promise<UiCustomerDetail> {
     })),
   );
 
+  // Résoudre nom_agence et nom_centre via le référentiel
+  let resolvedAgency = first?.id_agence ?? "";
+  let resolvedCentre = "";
+  try {
+    const ag = await getAgency(first?.id_agence ?? "");
+    resolvedAgency = ag.nom_agence ?? ag.id_agence;
+    resolvedCentre = ag.nom_centre;
+  } catch {
+    // fallback: id_agence brut
+  }
+
   const uiAccounts: UiAccount[] = accounts.map((a) => ({
     id: String(a.num_compte),
     customerId: id,
     number: String(a.num_compte),
-    agency: a.id_agence,
-    center: "",
+    agency: resolvedAgency,
+    center: resolvedCentre,
     managerId: a.mat_gestionnaire ?? "",
-    status: a.statut_facturation ?? "actif",
+    status: a.statut_facturation ?? "",
     balance: a.balance,
   }));
 
   return {
     id,
     name: client.raison_sociale,
-    type: client.marche === "ETAT" ? "etat" : client.marche === "PARTICULIER" ? "particulier" : "entreprise",
+    type: (client.marche === "ETAT" ? "etat" : client.marche === "PARTICULIER" ? "particulier" : "entreprise") as CustomerType,
     phone: client.tel ? String(client.tel) : "",
     email: client.email ?? "",
     address: "",
     city: "",
-    agency: first?.id_agence ?? "",
-    center: "",
+    agency: resolvedAgency,
+    center: resolvedCentre,
     managerId: first?.mat_gestionnaire ?? "",
-    status: first?.statut_facturation ?? "actif",
+    status: first?.statut_facturation ?? "",
+    marche: client.marche ?? "",
+    eBill: first?.e_bill ?? "",
+    identification: first?.identification ?? "",
     createdAt: "",
     lastPayment: "",
     overdue: num(summary?.total_outstanding),
@@ -1011,6 +1048,41 @@ export async function createAction(data: { customerId: string; type: string; not
     action_type: data.type,
     due_date,
     comment: data.note,
+  });
+}
+
+// ============================================================
+// Client list optimisé (1 requête SQL agrégée, pas de N+1)
+// ============================================================
+
+export interface AggregatedClientRow {
+  code_client: number;
+  raison_sociale: string;
+  marche: string | null;
+  email: string | null;
+  tel: string | null;
+  total_balance: number;
+  nb_comptes: number;
+  total_outstanding: number;
+  total_facture: number;
+  total_paid: number;
+  id_agence: string | null;
+  nom_agence: string | null;
+  nom_centre: string | null;
+  mat_gestionnaire: string | null;
+  nom_gestionnaire: string | null;
+  statut_facturation: string | null;
+  e_bill: string | null;
+  identification: string | null;
+}
+
+export async function listClientsAggregated(
+  filters: { query?: string; agency?: string; center?: string; marche?: string },
+  page: number,
+  pageSize: number,
+): Promise<{ total: number; items: AggregatedClientRow[] }> {
+  return apiRequest<{ total: number; items: AggregatedClientRow[] }>("/clients/list", {
+    query: qs({ q: filters.query, marche: filters.marche, centre: filters.center, agence: filters.agency, page, page_size: pageSize }),
   });
 }
 

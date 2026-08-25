@@ -31,20 +31,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/components/ui/toast";
 import { dateTimeFr } from "@/lib/format";
 
-/** Modèles CSV téléchargés en local (l'endpoint backend /imports/templates est encore en 501). */
+/** Modèles CSV téléchargés en local — colonnes conformes au fichier Excel source (44 colonnes). */
 const templates: Record<string, string> = {
-  Factures: "NUMERO_FACTURE;NUMERO_COMPTE;DATE_EMISSION;DATE_ECHEANCE;MONTANT;STATUT",
-  Paiements: "REFERENCE_PAIEMENT;NUMERO_COMPTE;DATE_PAIEMENT;MONTANT",
-  Clients: "IDENTIFIANT_CLIENT;NOM_COMPLET;TYPE;TELEPHONE;AGENCE",
-  Créances: "NUMERO_FACTURE;NUMERO_COMPTE;MONTANT_INITIAL;SOLDE;DATE_ECHEANCE",
+  Factures: "Compte;Marché;Code client;E-Bill;Raison sociale;Centre gestion;Agence;Mat. Gestionnaire;Gestionnaire;Identification;LS;Vobb;FTTx;TV;Tel;ADSL;Mobile;Autres;Décembre Facture 2025;Janvier Facture 2026;Février Facture 2026;Mars Facture 2026;Avril Facture 2026;Mai Facture 2026;Juin Facture 2026;Décembre Impayés 2025;Janvier Impayés 2026;Février Impayés 2026;Mars Impayés 2026;Avril Impayés 2026;Mai Impayés 2026;Juin Impayés 2026;Balance;Facturation;Type;Tax;Cycle;Model de control;Credit Limit;Indv à contacter;Contact;Adresse;Code postal;Email",
+  Clients: "Code client;Raison sociale;Marché;Email;Contact",
+  Gestionnaires: "Mat. Gestionnaire;Gestionnaire",
+  Agences: "Centre gestion;Agence",
 };
 
 /** Mappage libellé UI → entity_type backend. */
 const entityType: Record<string, string> = {
   Factures: "invoices",
-  Paiements: "payments",
   Clients: "clients",
-  Créances: "receivables",
+  Gestionnaires: "managers",
+  Agences: "agencies",
 };
 
 const batchTone: Record<string, "success" | "secondary" | "error"> = {

@@ -171,3 +171,12 @@ async def dashboard_camtel_debts(
     c = [x.strip() for x in centres.split(",")] if centres else None
     a = [x.strip() for x in agences.split(",")] if agences else None
     return await crud.top10_camtel_debts(db, centres=c, agences=a)
+
+
+@router.get("/dashboards/available-months", response_model=List[schemas.ReportRow])
+async def dashboard_available_months(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Retourne la liste des mois disponibles dans les factures."""
+    return await crud.get_available_months(db)

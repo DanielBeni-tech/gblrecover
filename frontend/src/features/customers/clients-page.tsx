@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FilterX, Plus, UserPlus, ArrowRight } from "lucide-react";
-import { createCustomer, listAgencies, listCentres, listManagers, searchCustomers } from "@/api/client";
+import { type AggregatedClientRow, createCustomer, listAgencies, listCentres, listClientsAggregated } from "@/api/client";
 import type { CustomerType } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { customerStatusLabel } from "@/components/ui/badge";
+
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +18,7 @@ import { useToast } from "@/components/ui/toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { xaf } from "@/lib/format";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 50;
 
 export function ClientsPage() {
   const [searchParams] = useSearchParams();
@@ -27,7 +27,7 @@ export function ClientsPage() {
   const [debounced, setDebounced] = useState(initialQuery);
   const [agency, setAgency] = useState("");
   const [center, setCenter] = useState("");
-  const [status, setStatus] = useState("");
+  const [marche, setMarche] = useState("");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const toast = useToast();
@@ -42,32 +42,41 @@ export function ClientsPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const filters = useMemo(() => ({ query: debounced, agency, center, status }), [debounced, agency, center, status]);
+  const filters = useMemo(() => ({ query: debounced, agency, center, marche }), [debounced, agency, center, marche]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["customers", filters, page],
-    queryFn: () => searchCustomers(filters, page, PAGE_SIZE),
+    queryFn: () => listClientsAggregated(filters, page, PAGE_SIZE),
   });
 
   // Référentiels pour les filtres (alimentés par l'API)
   const agenciesQ = useQuery({ queryKey: ["agencies"], queryFn: () => listAgencies({ pageSize: 200 }) });
   const centresQ = useQuery({ queryKey: ["centres"], queryFn: () => listCentres({ pageSize: 200 }) });
-  const managersQ = useQuery({ queryKey: ["managers"], queryFn: () => listManagers({ pageSize: 200 }) });
+
 
   const exportCsv = async () => {
-    const all = await searchCustomers(filters, 1, 10_000);
-    const header = ["Client ID;Nom;Type;Agence;Centre;Gestionnaire;Statut;Solde (XAF);Créances échues (XAF)"];
-    const rows = all.items.map((c) =>
+    // Exporter toutes les pages
+    const allItems: AggregatedClientRow[] = [];
+    let pg = 1;
+    while (true) {
+      const batch = await listClientsAggregated(filters, pg, 200);
+      allItems.push(...batch.items);
+      if (allItems.length >= batch.total || batch.items.length === 0) break;
+      pg++;
+    }
+    const header = ["Code client;Raison sociale;Marché;Email;Téléphone;Centre;Agence;Gestionnaire;Statut facturation;Balance (XAF)"];
+    const rows = allItems.map((c) =>
       [
-        c.id,
-        `"${c.name}"`,
-        c.type,
-        c.agency,
-        c.center,
-        c.managerId,
-        c.status,
-        c.balance,
-        c.overdue,
+        c.code_client,
+        `"${c.raison_sociale}"`,
+        (c.marche as string ?? "").trim(),
+        c.email ?? "",
+        c.tel ?? "",
+        c.nom_centre ?? "",
+        c.nom_agence ?? "",
+        c.nom_gestionnaire ?? "",
+        c.statut_facturation ?? "",
+        c.total_balance,
       ].join(";"),
     );
     const blob = new Blob(["﻿" + [...header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
@@ -85,7 +94,7 @@ export function ClientsPage() {
     setDebounced("");
     setAgency("");
     setCenter("");
-    setStatus("");
+    setMarche("");
     setPage(1);
   };
 
@@ -135,14 +144,12 @@ export function ClientsPage() {
             </Select>
           </div>
           <div className="md:col-span-2">
-            <Label htmlFor="statut">Statut du compte</Label>
-            <Select id="statut" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">Tous les statuts</option>
-              {Object.entries(customerStatusLabel).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
+            <Label htmlFor="marche">Marché</Label>
+            <Select id="marche" value={marche} onChange={(e) => setMarche(e.target.value)}>
+              <option value="">Tous les marchés</option>
+              <option value="OFF">OFF</option>
+              <option value="PAR">PAR</option>
+              <option value="PRO">PRO</option>
             </Select>
           </div>
           <div className="flex justify-end md:col-span-1">
@@ -187,41 +194,45 @@ export function ClientsPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <Table className="min-w-[1080px]">
+            <Table className="min-w-[1180px]">
               <TableHeader>
                 <tr>
-                  <TableHead>Client ID</TableHead>
-                  <TableHead>Nom complet</TableHead>
+                  <TableHead>Code client</TableHead>
+                  <TableHead>Raison sociale</TableHead>
+                  <TableHead>Marché</TableHead>
                   <TableHead>Agence</TableHead>
-                  <TableHead className="text-right">Solde total</TableHead>
-                  <TableHead className="text-right">Créances échues</TableHead>
+                  <TableHead>Centre</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className="text-right">Solde</TableHead>
+                  <TableHead className="text-right">Créances</TableHead>
                   <TableHead>Gestionnaire</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </tr>
               </TableHeader>
               <TableBody>
                 {data?.items.map((c) => (
-                  <TableRow key={c.id}>
+                  <TableRow key={c.code_client}>
                     <TableCell className="t-tabular text-data">
-                      <Link to={`/clients/${c.id}`} className="font-medium hover:underline">
-                        {c.id}
+                      <Link to={`/clients/${c.code_client}`} className="font-medium hover:underline">
+                        {c.code_client}
                       </Link>
                     </TableCell>
-                    <TableCell className="max-w-[220px] truncate font-medium">{c.name}</TableCell>
-                    <TableCell className="text-on-surface-variant">{c.agency || "—"}</TableCell>
-                    <TableCell className="t-tabular text-right">{xaf(c.balance)}</TableCell>
-                    <TableCell className={`t-tabular text-right font-semibold ${c.overdue > 0 ? "bg-error-container/10 text-error" : "text-outline"}`}>
-                      {xaf(c.overdue)}
+                    <TableCell className="max-w-[220px] truncate font-medium">{c.raison_sociale}</TableCell>
+                    <TableCell className="text-on-surface-variant">{(c.marche ?? "—").trim()}</TableCell>
+                    <TableCell className="text-on-surface-variant">{c.nom_agence || c.id_agence || "—"}</TableCell>
+                    <TableCell className="text-on-surface-variant">{c.nom_centre || "—"}</TableCell>
+                    <TableCell className="text-on-surface-variant">{c.statut_facturation || "—"}</TableCell>
+                    <TableCell className="t-tabular text-right">{xaf(c.total_balance)}</TableCell>
+                    <TableCell className={`t-tabular text-right font-semibold ${c.total_outstanding > 0 ? "bg-error-container/10 text-error" : "text-outline"}`}>
+                      {xaf(c.total_outstanding)}
                     </TableCell>
-                    <TableCell className="text-on-surface-variant">
-                      {c.managerName || (managersQ.data ?? []).find((m) => m.mat_gestionnaire === c.managerId)?.nom_gestionnaire || "—"}
-                    </TableCell>
+                    <TableCell className="text-on-surface-variant">{c.nom_gestionnaire || "—"}</TableCell>
                     <TableCell className="text-center">
                       <Link
-                        to={`/clients/${c.id}`}
+                        to={`/clients/${c.code_client}`}
                         className="inline-flex items-center gap-1.5 rounded-card border border-outline-variant bg-surface-container-low px-2.5 py-1.5 text-[13px] font-medium text-on-surface hover:border-primary hover:text-primary"
                         title="Ouvrir le dossier et consulter les actions possibles"
-                        aria-label={`Ouvrir le dossier de ${c.name}`}
+                        aria-label={`Ouvrir le dossier de ${c.raison_sociale}`}
                       >
                         Ouvrir <ArrowRight className="h-3.5 w-3.5" />
                       </Link>

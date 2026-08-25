@@ -3,10 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { listPayments } from "@/api/client";
 import type { Payment } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
-import { Badge, paymentStatusLabel, paymentStatusTone } from "@/components/ui/badge";
+import { Badge, paymentStatusTone, paymentStatusLabel } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,13 +83,8 @@ export function PaymentsPage() {
           </div>
         ) : items.length === 0 ? (
           <EmptyState
-            title="Aucun paiement enregistré"
-            description="Vérifiez votre recherche ou attendez les prochains encaissements pour voir les paiements ici."
-            action={
-              <Button variant="outline" size="sm" onClick={() => {}}>
-                Voir les créances
-              </Button>
-            }
+            title="Aucune donnée de paiement"
+            description="La source de données Excel ne contient pas d'information de paiement. Les paiements seront disponibles une fois intégrés depuis le système financier."
           />
         ) : (
           <div className="overflow-x-auto">

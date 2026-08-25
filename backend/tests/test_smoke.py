@@ -68,3 +68,13 @@ def test_demo_seed_credentials():
     assert "verify_password" in source
     assert "agent@camtel.cm" in source
     assert "demo1234" in source
+
+
+def test_bootstrap_demo_credentials():
+    """Le bootstrap d'auth doit exposer les identifiants de démo attendus."""
+    from app.db.bootstrap import DEMO_USERS, ROLE_CODES
+
+    assert ("AGENT", "Agent", "Agent de recouvrement — accès métier standard") in ROLE_CODES
+    assert ("ADMIN", "Administrateur", "Administration du système et RBAC") in ROLE_CODES
+    assert ("agent@camtel.cm", "demo1234", "Diane Mbarga", "AGENT") in DEMO_USERS
+    assert any(user[3] == "ADMIN" for user in DEMO_USERS)
