@@ -38,7 +38,66 @@ systemctl --user status gblrecover-postgres gblrecover-backend
 ```
 
 > 💡 Historique des données : `database/GBL - Juillet 2026.xlsx` (réel, 13 Mo) peut être
-> (re)chargé avec `python3 database/load_fast.py` (PORT 5433, MDP `postgres`).
+> (re)chargé avec `python3 database/load_data.py` — voir la procédure ci-dessous.
+
+---
+
+## Peupler / repeupler la base de données (procédure officielle, Windows)
+
+La procédure complète est encapsulée dans **`scripts/populate_db.ps1`** :
+
+```powershell
+# Peuplement standard : schéma + vues + données Excel + comptes de démo
+powershell -ExecutionPolicy Bypass -File scripts\populate_db.ps1
+
+# RESET total (DROP SCHEMA public CASCADE) puis rechargement complet
+powershell -ExecutionPolicy Bypass -File scripts\populate_db.ps1 -Clean
+
+# Schéma + vues uniquement (sans Excel ni comptes)
+powershell -ExecutionPolicy Bypass -File scripts\populate_db.ps1 -SkipData
+```
+
+Le script est **idempotent** (rejouable sans doublons) et enchaîne 6 étapes :
+1. Vérifie / démarre le cluster PostgreSQL dédié (`~/.gblrecover`, port **5433**, `postgres`/`postgres`) ;
+2. Crée la base `gblrecover` si absente ;
+3. Applique `database/schema.sql` puis `database/views.sql` (idempotent) ;
+4. Charge les données réelles via `database/load_data.py`
+   (`GBL - Juillet 2026.xlsx` → CENTRE, AGENCE, GESTIONNAIRE, CLIENT, COMPTE, FACTURE,
+   + traçabilité du batch dans IMPORT_BATCHES) ;
+5. Sème les rôles `AGENT`/`ADMIN` + comptes de démo via `backend/scripts/seed_demo.py` ;
+6. Affiche le résumé des effectifs pour vérification.
+
+Paramètres utiles : `-Port`, `-PgBin`, `-DbUser`, `-DbPass`, `-DbName`.
+
+### Procédure manuelle (équivalente, étape par étape)
+
+```powershell
+$env:PGPASSWORD = 'postgres'
+$psql = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
+
+# 1. Base + schéma officiel + vues
+& $psql -h localhost -p 5433 -U postgres -d gblrecover -v ON_ERROR_STOP=1 -f database\schema.sql
+& $psql -h localhost -p 5433 -U postgres -d gblrecover -v ON_ERROR_STOP=1 -f database\views.sql
+
+# 2. Données réelles depuis l'Excel (depuis le dossier database/)
+cd database
+$env:POSTGRES_HOST='localhost'; $env:POSTGRES_PORT='5433'
+$env:POSTGRES_USER='postgres';  $env:POSTGRES_PASSWORD='postgres'
+$env:POSTGRES_DB='gblrecover';  $env:CLEAN_DB='false'   # DDL déjà appliqué ci-dessus
+python load_data.py
+
+# 3. Rôles + comptes de démonstration
+cd ..\backend
+.\venv\Scripts\python.exe -m scripts.seed_demo   # ou : python -m scripts.seed_demo
+```
+
+### Références des loaders
+
+| Script | Rôle |
+|---|---|
+| `database/load_data.py` | **Loader officiel** aligné sur `schema.sql` : nettoie, importe centre/agence/gestionnaire/client/compte/facture, enregistre le batch d'import |
+| `backend/scripts/seed_demo.py` | Seed idempotent des tables d'auth, rôles et comptes démo |
+| `database/load_fast.py`, `load_v2.py`, `load_correct.py` | Variantes historiques (ne pas utiliser pour un nouveau chargement) |
 
 ---
 
