@@ -158,7 +158,7 @@ async def dashboard_top_indebted(
 ):
     c = [x.strip() for x in centres.split(",")] if centres else None
     a = [x.strip() for x in agences.split(",")] if agences else None
-    return await crud.top10_indebted_clients(db, centres=c, agences=a, mois=mois)
+    return await crud.top_indebted_clients(db, centres=c, agences=a, mois=mois, limit=20)
 
 
 @router.get("/dashboards/camtel-debts", response_model=List[schemas.ReportRow])
@@ -170,7 +170,7 @@ async def dashboard_camtel_debts(
 ):
     c = [x.strip() for x in centres.split(",")] if centres else None
     a = [x.strip() for x in agences.split(",")] if agences else None
-    return await crud.top10_camtel_debts(db, centres=c, agences=a)
+    return await crud.top_camtel_debts(db, centres=c, agences=a, limit=20)
 
 
 @router.get("/dashboards/available-months", response_model=List[schemas.ReportRow])

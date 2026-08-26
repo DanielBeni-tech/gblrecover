@@ -254,13 +254,11 @@ def main():
             return 0.0
 
     def clean_marche(value):
-        """Nettoie le marché (char(50))"""
+        """Conserve la valeur Excel réelle (PAR, PRO, PTT, OFF, ENT, …)."""
         if pd.isna(value) or value is None:
             return 'NON SPECIFIE'
         val = str(value).strip().upper()
-        if val in ['OFF', 'PAR', 'PRO']:
-            return val
-        return 'AUTRE'
+        return val or 'NON SPECIFIE'
 
     def detect_type_flux(libelle):
         """Détecte le type de flux"""

@@ -294,19 +294,13 @@ async def deactivate_client(db: AsyncSession, client_id: int) -> bool:
     return client is not None
 
 
-async def get_clients_list(
-    db: AsyncSession,
+def _clients_list_where(
     q: str | None = None,
     marche: str | None = None,
     centre: str | None = None,
     agence: str | None = None,
-    page: int = 1,
-    page_size: int = 50,
-):
-    """Liste paginée de clients avec agrégations en une seule requête SQL.
-
-    Retourne des dicts contenant les champs client + comptes agrégés + agence/centre/gestionnaire.
-    """
+    statut_facturation: str | None = None,
+) -> tuple[str, dict]:
     params: dict = {}
     where_clauses = ["1=1"]
 
@@ -322,8 +316,68 @@ async def get_clients_list(
     if agence:
         where_clauses.append("co.id_agence = :agence")
         params["agence"] = agence
+    if statut_facturation:
+        where_clauses.append("co.statut_facturation = :statut_facturation")
+        params["statut_facturation"] = statut_facturation
 
-    where_sql = " AND ".join(where_clauses)
+    return " AND ".join(where_clauses), params
+
+
+async def count_clients_list(
+    db: AsyncSession,
+    q: str | None = None,
+    marche: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    statut_facturation: str | None = None,
+) -> int:
+    """Compte les clients en respectant les mêmes filtres org que get_clients_list."""
+    where_sql, params = _clients_list_where(q=q, marche=marche, centre=centre, agence=agence, statut_facturation=statut_facturation)
+    sql = f"""
+    SELECT COUNT(*) AS total
+    FROM client c
+    JOIN (
+        SELECT DISTINCT ON (co3.code_client) co3.*
+        FROM compte co3
+        ORDER BY co3.code_client, co3.num_compte
+    ) co ON c.code_client = co.code_client
+    LEFT JOIN agence a ON co.id_agence = a.id_agence
+    WHERE {where_sql}
+    """
+    result = await db.execute(text(sql), params)
+    row = result.mappings().first()
+    return int(row["total"]) if row else 0
+
+
+async def get_client_markets(db: AsyncSession) -> list[str]:
+    """Marchés distincts présents en base (valeurs Excel réelles)."""
+    result = await db.execute(text("""
+        SELECT DISTINCT TRIM(marche) AS marche
+        FROM client
+        WHERE marche IS NOT NULL AND TRIM(marche) <> ''
+        ORDER BY marche
+    """))
+    return [str(r["marche"]) for r in result.mappings().all()]
+
+
+async def get_clients_list(
+    db: AsyncSession,
+    q: str | None = None,
+    marche: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    statut_facturation: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    """Liste paginée de clients avec agrégations en une seule requête SQL.
+
+    Retourne des dicts contenant les champs client + comptes agrégés + agence/centre/gestionnaire.
+    Tri par défaut : créances (outstanding) décroissant pour prioriser le recouvrement.
+    """
+    where_sql, params = _clients_list_where(
+        q=q, marche=marche, centre=centre, agence=agence, statut_facturation=statut_facturation
+    )
 
     # DISTINCT ON pour n'avoir qu'une ligne par client (premier compte)
     # + sous-requête agrégée pour les totaux par client
@@ -368,7 +422,7 @@ async def get_clients_list(
     LEFT JOIN agence a ON co.id_agence = a.id_agence
     LEFT JOIN gestionnaire g ON co.mat_gestionnaire = g.mat_gestionnaire
     WHERE {where_sql}
-    ORDER BY c.raison_sociale
+    ORDER BY agg.total_outstanding DESC NULLS LAST, c.raison_sociale
     LIMIT :limit OFFSET :offset
     """
     params["limit"] = page_size
@@ -1069,9 +1123,9 @@ async def reports_export_csv(db, report: str, filters=None):
 # Analytics décisionnels
 # ============================================================
 
-async def top10_indebted_clients(db, centres: list[str] | None = None, agences: list[str] | None = None, mois: str | None = None):
+async def top_indebted_clients(db, centres: list[str] | None = None, agences: list[str] | None = None, mois: str | None = None, limit: int = 20):
     conditions = ["f.outstanding_amount > 0"]
-    params: dict = {}
+    params: dict = {"limit": limit}
     if centres:
         placeholders = ", ".join(f":centre_{i}" for i in range(len(centres)))
         conditions.append(f"ag.nom_centre IN ({placeholders})")
@@ -1093,17 +1147,34 @@ async def top10_indebted_clients(db, centres: list[str] | None = None, agences: 
         params["mois_end"] = mois_end
     where = " AND ".join(conditions)
     result = await db.execute(text(f"""
-        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel, ag.nom_agence, c.nom_centre, COUNT(DISTINCT f.num_compte) AS nb_comptes, SUM(f.outstanding_amount) AS total_impaye, COUNT(*) AS nb_factures_impayees, MIN(f.date_emission) AS date_plus_ancienne, MAX(f.date_emission) AS date_plus_recente
-        FROM facture f JOIN compte cp ON f.num_compte = cp.num_compte JOIN client cl ON cp.code_client = cl.code_client JOIN agence ag ON cp.id_agence = ag.id_agence JOIN centre c ON ag.nom_centre = c.nom_centre
+        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel,
+               ag.id_agence, ag.nom_agence, c.nom_centre,
+               COUNT(DISTINCT f.num_compte) AS nb_comptes,
+               SUM(f.outstanding_amount) AS total_impaye,
+               COUNT(*) AS nb_factures_impayees,
+               MIN(f.date_emission) AS date_plus_ancienne,
+               MAX(f.date_emission) AS date_plus_recente
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN client cl ON cp.code_client = cl.code_client
+        JOIN agence ag ON cp.id_agence = ag.id_agence
+        JOIN centre c ON ag.nom_centre = c.nom_centre
         WHERE {where}
-        GROUP BY cl.code_client, cl.raison_sociale, cl.marche, cl.tel, ag.nom_agence, c.nom_centre ORDER BY total_impaye DESC LIMIT 10
+        GROUP BY cl.code_client, cl.raison_sociale, cl.marche, cl.tel, ag.id_agence, ag.nom_agence, c.nom_centre
+        ORDER BY total_impaye DESC
+        LIMIT :limit
     """), params)
     return result.mappings().all()
 
 
-async def top10_camtel_debts(db, centres: list[str] | None = None, agences: list[str] | None = None):
+# Alias rétrocompatible
+async def top10_indebted_clients(db, centres: list[str] | None = None, agences: list[str] | None = None, mois: str | None = None):
+    return await top_indebted_clients(db, centres=centres, agences=agences, mois=mois, limit=20)
+
+
+async def top_camtel_debts(db, centres: list[str] | None = None, agences: list[str] | None = None, limit: int = 20):
     conditions = ["cp.balance < 0"]
-    params: dict = {}
+    params: dict = {"limit": limit}
     if centres:
         placeholders = ", ".join(f":centre_{i}" for i in range(len(centres)))
         conditions.append(f"ag.nom_centre IN ({placeholders})")
@@ -1116,12 +1187,22 @@ async def top10_camtel_debts(db, centres: list[str] | None = None, agences: list
             params[f"agence_{i}"] = a
     where = " AND ".join(conditions)
     result = await db.execute(text(f"""
-        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel, cp.num_compte, cp.balance, ag.nom_agence, c.nom_centre, cp.statut_facturation
-        FROM compte cp JOIN client cl ON cp.code_client = cl.code_client JOIN agence ag ON cp.id_agence = ag.id_agence JOIN centre c ON ag.nom_centre = c.nom_centre
+        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel,
+               cp.num_compte, cp.balance, cp.id_agence,
+               ag.nom_agence, c.nom_centre, cp.statut_facturation
+        FROM compte cp
+        JOIN client cl ON cp.code_client = cl.code_client
+        JOIN agence ag ON cp.id_agence = ag.id_agence
+        JOIN centre c ON ag.nom_centre = c.nom_centre
         WHERE {where}
-        ORDER BY cp.balance ASC LIMIT 10
+        ORDER BY cp.balance ASC
+        LIMIT :limit
     """), params)
     return result.mappings().all()
+
+
+async def top10_camtel_debts(db, centres: list[str] | None = None, agences: list[str] | None = None):
+    return await top_camtel_debts(db, centres=centres, agences=agences, limit=20)
 
 
 # ============================================================
