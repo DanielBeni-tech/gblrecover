@@ -51,14 +51,21 @@ export function DashboardPage() {
 
   const { data: agencesData } = useQuery({
     queryKey: ["agences-list"],
-    queryFn: () => listAgencies({ pageSize: 300 }),
+    queryFn: () => listAgencies({ pageSize: 200 }),
     staleTime: 300_000,
   });
 
   const allCentres = (centresData ?? []).map((c) => c.nom_centre).sort();
-  const filteredAgenceNames = selectedCentres.length === 0
-    ? (agencesData ?? []).map((a) => a.nom_agence ?? a.id_agence).sort()
-    : (agencesData ?? []).filter((a) => selectedCentres.includes(a.nom_centre)).map((a) => a.nom_agence ?? a.id_agence).sort();
+
+  // Build a map: id_agence → display label (nom_agence or id_agence)
+  const agenceLabels: Record<string, string> = Object.fromEntries(
+    (agencesData ?? []).map((a) => [a.id_agence, a.nom_agence || a.id_agence]),
+  );
+
+  // Agence options are id_agence values (backend filters on cp.id_agence)
+  const filteredAgenceIds = selectedCentres.length === 0
+    ? (agencesData ?? []).map((a) => a.id_agence).sort()
+    : (agencesData ?? []).filter((a) => selectedCentres.includes(a.nom_centre)).map((a) => a.id_agence).sort();
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["dashboard", appliedFilters],
@@ -144,8 +151,7 @@ export function DashboardPage() {
             Filtres du tableau de bord
           </div>
           <div className="flex flex-wrap items-end gap-4">
-            <MultiSelect label="Centre" options={allCentres} selected={selectedCentres} onChange={(v) => { setSelectedCentres(v); setSelectedAgences([]); }} placeholder="Tous les centres" className="min-w-[220px] flex-1" />
-            <MultiSelect label="Agence" options={filteredAgenceNames} selected={selectedAgences} onChange={setSelectedAgences} placeholder="Toutes les agences" className="min-w-[220px] flex-1" />
+            <MultiSelect label="Centre" options={allCentres} selected={selectedCentres} onChange={(v) => { setSelectedCentres(v); setSelectedAgences([]); }} placeholder="Tous les centres" className="min-w-[220px] flex-1" />              <MultiSelect label="Agence" options={filteredAgenceIds} selected={selectedAgences} onChange={setSelectedAgences} placeholder="Toutes les agences" className="min-w-[220px] flex-1" labels={agenceLabels} />
             <div className="min-w-[180px] flex-1">
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">Mois</label>
               <Select value={selectedMois} onChange={(e) => setSelectedMois(e.target.value)}>

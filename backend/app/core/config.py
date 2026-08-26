@@ -8,7 +8,7 @@ load_dotenv(env_path, override=True)
 
 database_url = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5433/gblrecover",
+    "sqlite+aiosqlite:///./gblrecover.db",
 )
 
 
