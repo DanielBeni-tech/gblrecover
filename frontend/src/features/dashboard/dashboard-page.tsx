@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { AlertTriangle, RefreshCw, Filter, TrendingDown, TrendingUp } from "lucide-react";
-import { getDashboard, getTopIndebtedClients, getCamtelDebts, listCentres, listAgencies, getAvailableMonths } from "@/api/client";
+import { getDashboard, getTopIndebtedClients, getCamtelDebts, getAvailableMonths } from "@/api/client";
 import type { DashboardFilters } from "@/api/client";
 import type { ReportRow } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -10,10 +10,10 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { TrendChart } from "@/components/charts/trend-chart";
+import { OrgCascadeFilters } from "@/components/filters/org-cascade-filters";
 import { xaf, dateFr, dateTimeFr } from "@/lib/format";
 
 function num(v: unknown): number {
@@ -24,6 +24,28 @@ function num(v: unknown): number {
 
 function str(v: unknown): string {
   return v == null ? "" : String(v).trim();
+}
+
+function indebtedSourceUrl(row: ReportRow): string {
+  const code = str(row.code_client);
+  const params = new URLSearchParams({ tab: "creances", from: "dashboard" });
+  const centre = str(row.nom_centre);
+  const agence = str(row.nom_agence);
+  if (centre) params.set("centre", centre);
+  if (agence) params.set("agence", agence);
+  return `/clients/${code}?${params.toString()}`;
+}
+
+function camtelSourceUrl(row: ReportRow): string {
+  const code = str(row.code_client);
+  const params = new URLSearchParams({ tab: "comptes", from: "dashboard" });
+  const compte = str(row.num_compte);
+  const centre = str(row.nom_centre);
+  const agence = str(row.nom_agence);
+  if (compte) params.set("compte", compte);
+  if (centre) params.set("centre", centre);
+  if (agence) params.set("agence", agence);
+  return `/clients/${code}?${params.toString()}`;
 }
 
 export function DashboardPage() {
@@ -45,32 +67,6 @@ export function DashboardPage() {
       value: String(m.value ?? ""),
     })),
   ];
-
-  const { data: centresData } = useQuery({
-    queryKey: ["centres-list"],
-    queryFn: () => listCentres({ pageSize: 50 }),
-    staleTime: 300_000,
-  });
-
-  const { data: agencesData } = useQuery({
-    queryKey: ["agences-list"],
-    queryFn: () => listAgencies({ pageSize: 300 }),
-    staleTime: 300_000,
-  });
-
-  const allCentres = (centresData ?? []).map((c) => c.nom_centre).sort();
-
-  // Carte id_agence -> nom_agence pour l'affichage lisible.
-  const agencyLabelById = new Map<string, string>(
-    (agencesData ?? []).map((a) => [a.id_agence, a.nom_agence ?? a.id_agence]),
-  );
-
-  // Agences proposées : restreintes au(x) centre(s) sélectionné(s).
-  const filteredAgencies = (agencesData ?? [])
-    .filter((a) => selectedCentres.length === 0 || selectedCentres.includes(a.nom_centre))
-    .sort((x, y) => (x.nom_agence ?? x.id_agence).localeCompare(y.nom_agence ?? y.id_agence));
-  const filteredAgenceIds = filteredAgencies.map((a) => a.id_agence);
-  const agencyName = (id: string) => agencyLabelById.get(id) ?? id;
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["dashboard", appliedFilters],
@@ -148,16 +144,21 @@ export function DashboardPage() {
         </button>
       </div>
 
-      {/* ── Filter bar ── */}
       <Card className="border-primary/30 bg-surface-container-lowest">
         <CardContent className="py-4">
-          <div className="flex items-center gap-2 mb-3 text-[13px] font-semibold text-on-surface">
+          <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-on-surface">
             <Filter className="h-4 w-4 text-primary" />
             Filtres du tableau de bord
           </div>
           <div className="flex flex-wrap items-end gap-4">
-            <MultiSelect label="Centre" options={allCentres} selected={selectedCentres} onChange={(v) => { setSelectedCentres(v); setSelectedAgences([]); }} placeholder="Tous les centres" className="min-w-[220px] flex-1" />
-            <MultiSelect label="Agence" options={filteredAgenceIds} selected={selectedAgences} onChange={setSelectedAgences} getLabel={agencyName} placeholder="Toutes les agences" className="min-w-[220px] flex-1" />
+            <OrgCascadeFilters
+              mode="multi"
+              value={{ centres: selectedCentres, agences: selectedAgences }}
+              onChange={({ centres, agences }) => {
+                setSelectedCentres(centres);
+                setSelectedAgences(agences);
+              }}
+            />
             <div className="min-w-[180px] flex-1">
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">Mois</label>
               <Select value={selectedMois} onChange={(e) => setSelectedMois(e.target.value)}>
@@ -172,7 +173,6 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* ── KPIs ── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard label="Nombre de comptes" value={num(kpis.totalComptes).toLocaleString("fr-FR")} />
         <KpiCard label="Encours total (créances clients)" value={xaf(kpis.encoursTotal)} />
@@ -182,7 +182,6 @@ export function DashboardPage() {
         <KpiCard label="Solde négatif (CAMTEL doit)" value={xaf(Math.abs(kpis.soldeNegatif))} tone={kpis.soldeNegatif < 0 ? "warning" : "default"} />
       </div>
 
-      {/* ── Trend chart ── */}
       <Card>
         <CardHeader><CardTitle>Évolution de la dette vs encaissements</CardTitle></CardHeader>
         <CardContent>
@@ -192,66 +191,91 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* ── Top 10 Clients les plus endettés ── */}
-      <Card className="overflow-hidden border-l-4 border-l-error">
+      <Card className="overflow-hidden">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-error" />Top 10 — Clients les plus endettés</CardTitle>
-          <p className="text-[13px] text-on-surface-variant">Classement par montant total de factures impayées (outstanding)</p>
+          <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-error" />Top 20 — Clients les plus endettés</CardTitle>
+          <p className="text-[13px] text-on-surface-variant">Classement par montant total de factures impayées — clic pour ouvrir la source (créances du centre / agence)</p>
         </CardHeader>
         <div className="overflow-x-auto">
-          <Table className="min-w-[1000px]">
+          <Table className="min-w-[1100px]">
             <TableHeader><tr>
-              <TableHead className="w-8">#</TableHead><TableHead>Client</TableHead><TableHead>Code</TableHead><TableHead>Marché</TableHead>
-              <TableHead className="text-right">Nb comptes</TableHead><TableHead className="text-right">Nb factures</TableHead><TableHead className="text-right">Total impayé</TableHead><TableHead>Période</TableHead><TableHead className="text-right">Action</TableHead>
+              <TableHead className="w-8">#</TableHead>
+              <TableHead>Client</TableHead>
+              <TableHead>Code</TableHead>
+              <TableHead>Marché</TableHead>
+              <TableHead>Centre</TableHead>
+              <TableHead>Agence</TableHead>
+              <TableHead className="text-right">Nb comptes</TableHead>
+              <TableHead className="text-right">Nb factures</TableHead>
+              <TableHead className="text-right">Total impayé</TableHead>
+              <TableHead>Période</TableHead>
+              <TableHead className="text-right">Action</TableHead>
             </tr></TableHeader>
             <TableBody>
-              {loadingIndebted ? Array.from({ length: 5 }).map((_, i) => (<TableRow key={i}><TableCell colSpan={9}><Skeleton className="h-8 w-full" /></TableCell></TableRow>))
-              : (topIndebted ?? []).length === 0 ? (<TableRow><TableCell colSpan={9} className="py-8 text-center text-on-surface-variant">Aucune donnée disponible.</TableCell></TableRow>)
-              : (topIndebted ?? []).map((row: ReportRow, idx: number) => (
-                <TableRow key={idx} className={idx < 3 ? "bg-error-container/10" : ""}>
-                  <TableCell className="t-tabular font-bold text-error">{idx + 1}</TableCell>
-                  <TableCell className="font-medium max-w-[280px] truncate">{str(row.raison_sociale)}</TableCell>
-                  <TableCell className="t-tabular text-data font-medium"><Link to={`/clients/${row.code_client}`} className="hover:underline">{str(row.code_client)}</Link></TableCell>
-                  <TableCell>{str(row.marche)}</TableCell>
-                  <TableCell className="t-tabular text-right">{num(row.nb_comptes)}</TableCell>
-                  <TableCell className="t-tabular text-right">{num(row.nb_factures_impayees)}</TableCell>
-                  <TableCell className="t-tabular text-right font-bold text-error">{xaf(num(row.total_impaye))}</TableCell>
-                  <TableCell className="t-tabular text-on-surface-variant text-[12px]">{dateFr(str(row.date_plus_ancienne))} → {dateFr(str(row.date_plus_recente))}</TableCell>
-                  <TableCell className="text-right"><Link to={`/clients/${row.code_client}`} className="t-label text-primary hover:underline">Ouvrir</Link></TableCell>
-                </TableRow>
-              ))}
+              {loadingIndebted ? Array.from({ length: 5 }).map((_, i) => (<TableRow key={i}><TableCell colSpan={11}><Skeleton className="h-8 w-full" /></TableCell></TableRow>))
+              : (topIndebted ?? []).length === 0 ? (<TableRow><TableCell colSpan={11} className="py-8 text-center text-on-surface-variant">Aucune donnée disponible.</TableCell></TableRow>)
+              : (topIndebted ?? []).map((row: ReportRow, idx: number) => {
+                const href = indebtedSourceUrl(row);
+                return (
+                  <TableRow key={`${str(row.code_client)}-${str(row.nom_agence)}-${idx}`} className={idx < 3 ? "bg-error-container/10" : ""}>
+                    <TableCell className="t-tabular font-bold text-error">{idx + 1}</TableCell>
+                    <TableCell className="max-w-[220px] truncate font-medium">{str(row.raison_sociale)}</TableCell>
+                    <TableCell className="t-tabular font-medium text-data"><Link to={href} className="hover:underline">{str(row.code_client)}</Link></TableCell>
+                    <TableCell>{str(row.marche)}</TableCell>
+                    <TableCell className="max-w-[140px] truncate text-[12px] text-on-surface-variant">{str(row.nom_centre) || "—"}</TableCell>
+                    <TableCell className="max-w-[160px] truncate text-[12px] text-on-surface-variant">{str(row.nom_agence) || "—"}</TableCell>
+                    <TableCell className="t-tabular text-right">{num(row.nb_comptes)}</TableCell>
+                    <TableCell className="t-tabular text-right">{num(row.nb_factures_impayees)}</TableCell>
+                    <TableCell className="t-tabular text-right font-bold text-error">{xaf(num(row.total_impaye))}</TableCell>
+                    <TableCell className="t-tabular text-[12px] text-on-surface-variant">{dateFr(str(row.date_plus_ancienne))} → {dateFr(str(row.date_plus_recente))}</TableCell>
+                    <TableCell className="text-right"><Link to={href} className="t-label text-primary hover:underline">Voir la source</Link></TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
       </Card>
 
-      {/* ── Top 10 Dettes CAMTEL ── */}
-      <Card className="overflow-hidden border-l-4 border-l-warning">
+      <Card className="overflow-hidden">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><TrendingDown className="h-5 w-5 text-warning" />Top 10 — Dettes CAMTEL (soldes négatifs)</CardTitle>
-          <p className="text-[13px] text-on-surface-variant">Comptes où CAMTEL a versé plus que ce qui était facturé (avances / remboursements dus)</p>
+          <CardTitle className="flex items-center gap-2"><TrendingDown className="h-5 w-5 text-warning" />Top 20 — Dettes CAMTEL (soldes négatifs)</CardTitle>
+          <p className="text-[13px] text-on-surface-variant">Comptes où CAMTEL a versé plus que ce qui était facturé — clic pour ouvrir le compte source</p>
         </CardHeader>
         <div className="overflow-x-auto">
-          <Table className="min-w-[1000px]">
+          <Table className="min-w-[1100px]">
             <TableHeader><tr>
-              <TableHead className="w-8">#</TableHead><TableHead>Client</TableHead><TableHead>Code</TableHead><TableHead>Compte</TableHead><TableHead>Marché</TableHead><TableHead>Agence</TableHead><TableHead className="text-right">Dette CAMTEL</TableHead><TableHead>Statut</TableHead><TableHead className="text-right">Action</TableHead>
+              <TableHead className="w-8">#</TableHead>
+              <TableHead>Client</TableHead>
+              <TableHead>Code</TableHead>
+              <TableHead>Compte</TableHead>
+              <TableHead>Marché</TableHead>
+              <TableHead>Centre</TableHead>
+              <TableHead>Agence</TableHead>
+              <TableHead className="text-right">Dette CAMTEL</TableHead>
+              <TableHead>Statut</TableHead>
+              <TableHead className="text-right">Action</TableHead>
             </tr></TableHeader>
             <TableBody>
-              {loadingDebts ? Array.from({ length: 5 }).map((_, i) => (<TableRow key={i}><TableCell colSpan={9}><Skeleton className="h-8 w-full" /></TableCell></TableRow>))
-              : (camtelDebts ?? []).length === 0 ? (<TableRow><TableCell colSpan={9} className="py-8 text-center text-on-surface-variant">Aucune dette CAMTEL enregistrée.</TableCell></TableRow>)
-              : (camtelDebts ?? []).map((row: ReportRow, idx: number) => (
-                <TableRow key={idx} className={idx < 3 ? "bg-warning-container/10" : ""}>
-                  <TableCell className="t-tabular font-bold text-warning">{idx + 1}</TableCell>
-                  <TableCell className="font-medium max-w-[240px] truncate">{str(row.raison_sociale)}</TableCell>
-                  <TableCell className="t-tabular text-data font-medium"><Link to={`/clients/${row.code_client}`} className="hover:underline">{str(row.code_client)}</Link></TableCell>
-                  <TableCell className="t-tabular">{str(row.num_compte)}</TableCell>
-                  <TableCell>{str(row.marche)}</TableCell>
-                  <TableCell className="text-[12px] text-on-surface-variant max-w-[180px] truncate">{str(row.nom_agence)}</TableCell>
-                  <TableCell className="t-tabular text-right font-bold text-warning">{xaf(Math.abs(num(row.balance)))}</TableCell>
-                  <TableCell>{str(row.statut_facturation)}</TableCell>
-                  <TableCell className="text-right"><Link to={`/clients/${row.code_client}`} className="t-label text-primary hover:underline">Ouvrir</Link></TableCell>
-                </TableRow>
-              ))}
+              {loadingDebts ? Array.from({ length: 5 }).map((_, i) => (<TableRow key={i}><TableCell colSpan={10}><Skeleton className="h-8 w-full" /></TableCell></TableRow>))
+              : (camtelDebts ?? []).length === 0 ? (<TableRow><TableCell colSpan={10} className="py-8 text-center text-on-surface-variant">Aucune dette CAMTEL enregistrée.</TableCell></TableRow>)
+              : (camtelDebts ?? []).map((row: ReportRow, idx: number) => {
+                const href = camtelSourceUrl(row);
+                return (
+                  <TableRow key={`${str(row.num_compte)}-${idx}`} className={idx < 3 ? "bg-warning-container/10" : ""}>
+                    <TableCell className="t-tabular font-bold text-warning">{idx + 1}</TableCell>
+                    <TableCell className="max-w-[200px] truncate font-medium">{str(row.raison_sociale)}</TableCell>
+                    <TableCell className="t-tabular font-medium text-data"><Link to={href} className="hover:underline">{str(row.code_client)}</Link></TableCell>
+                    <TableCell className="t-tabular">{str(row.num_compte)}</TableCell>
+                    <TableCell>{str(row.marche)}</TableCell>
+                    <TableCell className="max-w-[140px] truncate text-[12px] text-on-surface-variant">{str(row.nom_centre) || "—"}</TableCell>
+                    <TableCell className="max-w-[160px] truncate text-[12px] text-on-surface-variant">{str(row.nom_agence) || "—"}</TableCell>
+                    <TableCell className="t-tabular text-right font-bold text-warning">{xaf(Math.abs(num(row.balance)))}</TableCell>
+                    <TableCell>{str(row.statut_facturation)}</TableCell>
+                    <TableCell className="text-right"><Link to={href} className="t-label text-primary hover:underline">Voir la source</Link></TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

@@ -984,27 +984,41 @@ export async function getCustomer(id: string): Promise<UiCustomerDetail> {
     })),
   );
 
-  // Résoudre nom_agence et nom_centre via le référentiel
-  let resolvedAgency = first?.id_agence ?? "";
-  let resolvedCentre = "";
-  try {
-    const ag = await getAgency(first?.id_agence ?? "");
-    resolvedAgency = ag.nom_agence ?? ag.id_agence;
-    resolvedCentre = ag.nom_centre;
-  } catch {
-    // fallback: id_agence brut
+  // Résoudre nom_agence / nom_centre pour chaque compte (multi-agences possibles)
+  const agencyCache = new Map<string, { nom_agence: string; nom_centre: string }>();
+  async function resolveAgency(idAgence: string | null | undefined) {
+    if (!idAgence) return { nom_agence: "", nom_centre: "" };
+    const cached = agencyCache.get(idAgence);
+    if (cached) return cached;
+    try {
+      const ag = await getAgency(idAgence);
+      const resolved = { nom_agence: ag.nom_agence ?? ag.id_agence, nom_centre: ag.nom_centre };
+      agencyCache.set(idAgence, resolved);
+      return resolved;
+    } catch {
+      const fallback = { nom_agence: idAgence, nom_centre: "" };
+      agencyCache.set(idAgence, fallback);
+      return fallback;
+    }
   }
 
-  const uiAccounts: UiAccount[] = accounts.map((a) => ({
-    id: String(a.num_compte),
-    customerId: id,
-    number: String(a.num_compte),
-    agency: resolvedAgency,
-    center: resolvedCentre,
-    managerId: a.mat_gestionnaire ?? "",
-    status: a.statut_facturation ?? "",
-    balance: a.balance,
-  }));
+  const firstResolved = await resolveAgency(first?.id_agence);
+  const uiAccounts: UiAccount[] = await Promise.all(
+    accounts.map(async (a) => {
+      const resolved = await resolveAgency(a.id_agence);
+      return {
+        id: String(a.num_compte),
+        customerId: id,
+        number: String(a.num_compte),
+        agency: resolved.nom_agence,
+        center: resolved.nom_centre,
+        managerId: a.mat_gestionnaire ?? "",
+        status: a.statut_facturation ?? "",
+        balance: a.balance,
+        eBill: a.e_bill ?? "",
+      };
+    }),
+  );
 
   return {
     id,
@@ -1014,8 +1028,8 @@ export async function getCustomer(id: string): Promise<UiCustomerDetail> {
     email: client.email ?? "",
     address: "",
     city: "",
-    agency: resolvedAgency,
-    center: resolvedCentre,
+    agency: firstResolved.nom_agence,
+    center: firstResolved.nom_centre,
     managerId: first?.mat_gestionnaire ?? "",
     status: first?.statut_facturation ?? "",
     marche: client.marche ?? "",
@@ -1077,13 +1091,26 @@ export interface AggregatedClientRow {
 }
 
 export async function listClientsAggregated(
-  filters: { query?: string; agency?: string; center?: string; marche?: string },
+  filters: { query?: string; agency?: string; center?: string; marche?: string; statut_facturation?: string },
   page: number,
   pageSize: number,
 ): Promise<{ total: number; items: AggregatedClientRow[] }> {
   return apiRequest<{ total: number; items: AggregatedClientRow[] }>("/clients/list", {
-    query: qs({ q: filters.query, marche: filters.marche, centre: filters.center, agence: filters.agency, page, page_size: pageSize }),
+    query: qs({
+      q: filters.query,
+      marche: filters.marche,
+      centre: filters.center,
+      agence: filters.agency,
+      statut_facturation: filters.statut_facturation,
+      page,
+      page_size: pageSize,
+    }),
   });
+}
+
+export async function listClientMarkets(): Promise<string[]> {
+  const res = await apiRequest<{ items: string[] }>("/clients/markets");
+  return res.items ?? [];
 }
 
 // ============================================================

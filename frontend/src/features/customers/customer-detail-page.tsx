@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, ArrowRight, Building2, CalendarClock, CheckCircle2, Mail, MessageSquare, Phone } from "lucide-react";
@@ -24,6 +24,10 @@ export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get("tab") ?? "resume";
+  const fromDashboard = searchParams.get("from") === "dashboard";
+  const focusCentre = searchParams.get("centre") ?? "";
+  const focusAgence = searchParams.get("agence") ?? "";
+  const focusCompte = searchParams.get("compte") ?? "";
   const [actionOpen, setActionOpen] = useState(false);
 
   const { data: customer, isLoading, isError, refetch } = useQuery({
@@ -31,6 +35,13 @@ export function CustomerDetailPage() {
     queryFn: () => getCustomer(id!),
     enabled: Boolean(id),
   });
+
+  function updateTab(nextTab: string) {
+    const next = new URLSearchParams(searchParams);
+    if (nextTab === "resume") next.delete("tab");
+    else next.set("tab", nextTab);
+    setSearchParams(next);
+  }
 
   const metrics = useMemo(() => {
     if (!customer) return null;
@@ -54,6 +65,35 @@ export function CustomerDetailPage() {
     });
     return { montantEchu, dso: weightedAge, risk, aged, open };
   }, [customer]);
+
+  const focusedAccountNumbers = useMemo(() => {
+    if (!customer) return new Set<string>();
+    if (focusCompte) return new Set([focusCompte]);
+    if (!focusCentre && !focusAgence) return new Set<string>();
+    return new Set(
+      customer.accounts
+        .filter((a) => {
+          const centreOk = !focusCentre || a.center === focusCentre;
+          const agenceOk = !focusAgence || a.agency === focusAgence;
+          return centreOk && agenceOk;
+        })
+        .map((a) => a.number),
+    );
+  }, [customer, focusCentre, focusAgence, focusCompte]);
+
+  const visibleReceivables = useMemo(() => {
+    if (!customer) return [];
+    const open = customer.receivables.filter((r) => r.balance > 0);
+    if (focusedAccountNumbers.size === 0) return open;
+    const matched = open.filter((r) => focusedAccountNumbers.has(r.accountNumber));
+    return matched.length > 0 ? matched : open;
+  }, [customer, focusedAccountNumbers]);
+
+  useEffect(() => {
+    if (tab !== "comptes" || !focusCompte) return;
+    const el = document.getElementById(`compte-${focusCompte}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [tab, focusCompte, customer]);
 
   if (isLoading) {
     return (
@@ -89,9 +129,28 @@ export function CustomerDetailPage() {
 
   return (
     <>
-      <Link to="/clients" className="flex w-fit items-center gap-1.5 text-[13px] text-on-surface-variant hover:text-primary">
-        <ArrowLeft className="h-3.5 w-3.5" /> Retour à la liste
-      </Link>
+      <div className="flex flex-wrap items-center gap-3">
+        <Link to="/clients" className="flex w-fit items-center gap-1.5 text-[13px] text-on-surface-variant hover:text-primary">
+          <ArrowLeft className="h-3.5 w-3.5" /> Retour à la liste
+        </Link>
+        {fromDashboard && (
+          <Link to="/dashboard" className="flex w-fit items-center gap-1.5 text-[13px] text-primary hover:underline">
+            ← Retour au tableau de bord
+          </Link>
+        )}
+      </div>
+
+      {fromDashboard && (
+        <div className="rounded-panel border border-primary/25 bg-primary-container/20 px-4 py-3 text-[13px] text-on-surface">
+          <span className="font-semibold text-primary">Provenance tableau de bord</span>
+          {" — "}
+          source exacte
+          {focusCentre ? ` · Centre ${focusCentre}` : ""}
+          {focusAgence ? ` · Agence ${focusAgence}` : ""}
+          {focusCompte ? ` · Compte ${focusCompte}` : ""}
+          {tab === "creances" ? " · créances impayées" : tab === "comptes" ? " · compte cible" : ""}
+        </div>
+      )}
 
       {/* Résumé client */}
       <Card className="p-5">
@@ -127,7 +186,7 @@ export function CustomerDetailPage() {
       <Tabs
         items={tabs}
         active={tab}
-        onChange={(t) => setSearchParams(t === "resume" ? {} : { tab: t })}
+        onChange={updateTab}
       />
 
       {metrics && metrics.montantEchu > 0 && (
@@ -144,7 +203,7 @@ export function CustomerDetailPage() {
               <Button size="sm" onClick={() => setActionOpen(true)}>
                 <MessageSquare className="h-3.5 w-3.5" /> Nouvelle action de recouvrement
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setSearchParams({ tab: "creances" })}>
+              <Button variant="outline" size="sm" onClick={() => updateTab("creances")}>
                 Voir les créances <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -230,7 +289,7 @@ export function CustomerDetailPage() {
               <CardHeader>
                 <CardTitle>Dernières actions de recouvrement</CardTitle>
                 <button
-                  onClick={() => setSearchParams({ tab: "historique" })}
+                  onClick={() => updateTab("historique")}
                   className="t-label text-primary hover:underline"
                 >
                   Voir tout l'historique
@@ -264,16 +323,29 @@ export function CustomerDetailPage() {
                 </tr>
               </TableHeader>
               <TableBody>
-                {customer.accounts.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="t-tabular text-data">{a.number}</TableCell>
-                    <TableCell className="text-on-surface-variant">{a.agency}</TableCell>
-                    <TableCell className="text-on-surface-variant">{a.center}</TableCell>
-                    <TableCell className="text-on-surface-variant">{customer.manager?.name ?? "—"}</TableCell>
-                    <TableCell className="text-on-surface-variant">{a.status === "En cours" ? "En cours" : a.status === "Arrêt" ? "Arrêt" : (a.status || "—")}</TableCell>
-                    <TableCell className="t-tabular text-right">{xaf(a.balance)}</TableCell>
-                  </TableRow>
-                ))}
+                {customer.accounts.map((a) => {
+                  const isFocus =
+                    (focusCompte && a.number === focusCompte) ||
+                    (!focusCompte && focusedAccountNumbers.size > 0 && focusedAccountNumbers.has(a.number));
+                  return (
+                    <TableRow
+                      key={a.id}
+                      id={a.number === focusCompte ? `compte-${a.number}` : undefined}
+                      className={isFocus ? "bg-primary-container/25 ring-1 ring-inset ring-primary/30" : undefined}
+                    >
+                      <TableCell className="t-tabular text-data font-medium">
+                        {a.number}
+                        {isFocus && <span className="ml-2 text-[11px] font-semibold text-primary">SOURCE</span>}
+                      </TableCell>
+                      <TableCell className="text-on-surface-variant">{a.agency || "—"}</TableCell>
+                      <TableCell className="text-on-surface-variant">{a.center || "—"}</TableCell>
+                      <TableCell className="text-on-surface-variant">{customer.manager?.name ?? "—"}</TableCell>
+                      <TableCell className="text-on-surface-variant">{a.eBill || "—"}</TableCell>
+                      <TableCell className="text-on-surface-variant">{a.status || "—"}</TableCell>
+                      <TableCell className="t-tabular text-right">{xaf(a.balance)}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -358,6 +430,15 @@ export function CustomerDetailPage() {
 
       {tab === "creances" && (
         <Card>
+          {(focusCentre || focusAgence) && (
+            <div className="border-b border-outline-variant px-4 py-2.5 text-[13px] text-on-surface-variant">
+              Créances filtrées selon la provenance dashboard
+              {focusCentre ? ` · ${focusCentre}` : ""}
+              {focusAgence ? ` / ${focusAgence}` : ""}
+              {" — "}
+              {visibleReceivables.length} ligne(s)
+            </div>
+          )}
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -372,21 +453,34 @@ export function CustomerDetailPage() {
                 </tr>
               </TableHeader>
               <TableBody>
-                {customer.receivables.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="t-tabular text-data">{r.invoiceNumber}</TableCell>
-                    <TableCell className="t-tabular text-on-surface-variant">{r.accountNumber}</TableCell>
-                    <TableCell className="t-tabular text-right text-on-surface-variant">{xaf(r.initial)}</TableCell>
-                    <TableCell className={`t-tabular text-right font-semibold ${r.balance > 0 ? "text-error" : "text-on-surface"}`}>
-                      {xaf(r.balance)}
-                    </TableCell>
-                    <TableCell className="t-tabular text-on-surface-variant">{r.ageDays} j</TableCell>
-                    <TableCell className="t-tabular text-on-surface-variant">{dateFr(r.dueDate)}</TableCell>
-                    <TableCell>
-                      <Badge tone={r.status === "urgente" ? "error" : r.status === "en_retard" ? "warning" : "success"}>{r.status === "urgente" ? "Urgente" : r.status === "en_retard" ? "En retard" : "Normale"}</Badge>
+                {visibleReceivables.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-on-surface-variant">
+                      Aucune créance impayée pour ce périmètre.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  visibleReceivables.map((r) => {
+                    const isFocus = focusedAccountNumbers.size > 0 && focusedAccountNumbers.has(r.accountNumber);
+                    return (
+                      <TableRow key={r.id} className={isFocus ? "bg-error-container/15" : undefined}>
+                        <TableCell className="t-tabular text-data">{r.invoiceNumber}</TableCell>
+                        <TableCell className="t-tabular text-on-surface-variant">{r.accountNumber}</TableCell>
+                        <TableCell className="t-tabular text-right text-on-surface-variant">{xaf(r.initial)}</TableCell>
+                        <TableCell className={`t-tabular text-right font-semibold ${r.balance > 0 ? "text-error" : "text-on-surface"}`}>
+                          {xaf(r.balance)}
+                        </TableCell>
+                        <TableCell className="t-tabular text-on-surface-variant">{r.ageDays} j</TableCell>
+                        <TableCell className="t-tabular text-on-surface-variant">{dateFr(r.dueDate)}</TableCell>
+                        <TableCell>
+                          <Badge tone={r.status === "urgente" ? "error" : r.status === "en_retard" ? "warning" : "success"}>
+                            {r.status === "urgente" ? "Urgente" : r.status === "en_retard" ? "En retard" : "Normale"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>

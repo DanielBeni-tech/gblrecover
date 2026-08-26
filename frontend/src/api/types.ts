@@ -334,6 +334,7 @@ export interface UiAccount {
   managerId: string;
   status: string;
   balance: number;
+  eBill?: string;
 }
 
 export interface UiInvoice {

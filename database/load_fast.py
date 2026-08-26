@@ -63,9 +63,11 @@ def clean_balance(v):
     except: return 0.0
 
 def clean_marche(v):
-    if pd.isna(v): return 'NON SPECIFIE'
-    v = str(v).strip().upper()
-    return v if v in ('OFF', 'PAR', 'PRO') else 'AUTRE'
+    """Conserve la valeur Excel réelle (PAR, PRO, PTT, OFF, ENT, …)."""
+    if pd.isna(v):
+        return "NON SPECIFIE"
+    s = str(v).strip().upper()
+    return s or "NON SPECIFIE"
 
 def clean_identification(v):
     if pd.isna(v): return 'Non identifié'

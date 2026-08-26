@@ -46,7 +46,7 @@ def cb(v):
     except: return 0.0
 def cm(v):
     if pd.isna(v): return 'NON SPECIFIE'
-    v=str(v).strip().upper(); return v if v in ('OFF','PAR','PRO') else 'AUTRE'
+    v=str(v).strip().upper(); return v or 'NON SPECIFIE'
 def ci(v):
     if pd.isna(v): return 'Non identifié'
     s=str(v).strip().lower()

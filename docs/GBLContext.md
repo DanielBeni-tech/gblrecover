@@ -275,7 +275,7 @@ erDiagram
     CLIENT ||--o{ COMPTE : possede
     AGENCE ||--o{ COMPTE : rattache
     GESTIONNAIRE ||--o{ COMPTE : suit
-    COMPTE ||--o{ SOUSCRIPTION : porte
+    COMPTE ||--o{ SOUSCRIPTION : porteL
     SERVICE ||--o{ SOUSCRIPTION : concerne
     COMPTE ||--o{ FACTURE : recoit
     COMPTE ||--o{ PAIEMENT : effectue

@@ -36,19 +36,45 @@ async def count_clients(
     return {"total": await crud.count_clients(db, q=q, status=status, marche=marche)}
 
 
+@router.get("/clients/markets")
+async def list_client_markets(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Marchés distincts issus des données clients (référence Excel)."""
+    return {"items": await crud.get_client_markets(db)}
+
+
 @router.get("/clients/list")
 async def list_clients_agg(
     q: Optional[str] = Query(None),
     marche: Optional[str] = Query(None),
     centre: Optional[str] = Query(None),
     agence: Optional[str] = Query(None),
+    statut_facturation: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
     """Liste paginée de clients avec agrégations financières en une seule requête."""
-    rows = await crud.get_clients_list(db, q=q, marche=marche, centre=centre, agence=agence, page=page, page_size=page_size)
-    total = await crud.count_clients(db, q=q, marche=marche)
+    rows = await crud.get_clients_list(
+        db,
+        q=q,
+        marche=marche,
+        centre=centre,
+        agence=agence,
+        statut_facturation=statut_facturation,
+        page=page,
+        page_size=page_size,
+    )
+    total = await crud.count_clients_list(
+        db,
+        q=q,
+        marche=marche,
+        centre=centre,
+        agence=agence,
+        statut_facturation=statut_facturation,
+    )
     return {"total": total, "items": [dict(r) for r in rows]}
 
 
