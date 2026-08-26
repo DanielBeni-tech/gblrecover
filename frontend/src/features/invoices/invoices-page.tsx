@@ -154,7 +154,7 @@ export function InvoicesPage() {
               <TableBody>
                 {data?.items.map((f) => (
                   <TableRow key={f.id}>
-                    <TableCell className={cn("t-tabular", f.status === "payee" ? "text-on-surface-variant/70" : "text-primary-container")}>
+                    <TableCell className={cn("t-tabular text-success")}>
                       {f.number}
                     </TableCell>
                     <TableCell className="max-w-[220px] truncate font-medium">{f.customerId}</TableCell>
