@@ -13,7 +13,7 @@
  * encapsulé ici : pour changer de transport, on ne touche qu'à ce fichier.
  */
 import { ApiError, type AgingDatum, type UiDashboardData, type UiCustomer, type UiCustomerDetail, type UiImportBatch, type UiImportResult, type UiInvoice, type UiManager, type UiPayment, type UiReceivable } from "@/api/types";
-import { customers as mockCustomers, importBatches, managers as mockManagers, trend } from "@/data/mock-data";
+import { customers as mockCustomers, DEMO_FRESHNESS, importBatches, managers as mockManagers, trend } from "@/data/mock-data";
 
 /** URL de base, préfixe versionné et modes depuis .env (Vite expose VITE_*). */
 export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
@@ -305,26 +305,57 @@ export async function getCustomer(id: string): Promise<UiCustomerDetail> {
 // Factures
 // ============================================================
 
-export async function getInvoices(filters: { query?: string; status?: string; page: number; pageSize: number }): Promise<{ total: number; items: UiInvoice[] }> {
+export async function getInvoices(filters: {
+  query?: string;
+  status?: string;
+  sortByDueDate?: boolean;
+  page: number;
+  pageSize: number;
+}): Promise<{
+  total: number;
+  items: UiInvoice[];
+  counts: { payee: number; partielle: number; impayee: number; annulee: number; nonPayees: number };
+  summary: { montantAttendu: number; montantRecu: number; tauxRecouvrement: number };
+  freshness: string;
+}> {
   return withDemoFallback("/invoices", async () => {
     await new Promise((r) => setTimeout(r, 300));
-    let items: UiInvoice[] = [];
+    let all: UiInvoice[] = [];
     mockCustomers.forEach((c) => {
       c.invoices.forEach((inv) => {
-        items.push({ ...inv, customerId: c.id });
+        all.push({ ...inv, customerId: c.id });
       });
     });
     if (filters.query) {
       const q = filters.query.toLowerCase();
-      items = items.filter((inv) => inv.number.toLowerCase().includes(q) || inv.customerId.toLowerCase().includes(q));
+      all = all.filter((inv) => inv.number.toLowerCase().includes(q) || inv.customerId.toLowerCase().includes(q));
     }
-    if (filters.status) {
-      items = items.filter((inv) => inv.status === filters.status);
+    // Compteurs et synthèse « revenue assurance » sur l'ensemble filtré (tous statuts confondus).
+    const counts = { payee: 0, partielle: 0, impayee: 0, annulee: 0, nonPayees: 0 };
+    let montantAttendu = 0;
+    let montantRecu = 0;
+    for (const inv of all) {
+      if (inv.status === "payee") counts.payee += 1;
+      else if (inv.status === "partielle") counts.partielle += 1;
+      else if (inv.status === "impayee") counts.impayee += 1;
+      else counts.annulee += 1;
+      montantAttendu += inv.total;
+      montantRecu += inv.paid;
+    }
+    counts.nonPayees = counts.partielle + counts.impayee;
+    const summary = {
+      montantAttendu,
+      montantRecu,
+      tauxRecouvrement: montantAttendu > 0 ? Math.round((montantRecu / montantAttendu) * 100) : 0,
+    };
+    let items = filters.status ? all.filter((inv) => inv.status === filters.status) : all;
+    if (filters.sortByDueDate) {
+      items = [...items].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     }
     const total = items.length;
     const start = (filters.page - 1) * filters.pageSize;
     items = items.slice(start, start + filters.pageSize);
-    return { total, items };
+    return { total, items, counts, summary, freshness: DEMO_FRESHNESS };
   });
 }
 

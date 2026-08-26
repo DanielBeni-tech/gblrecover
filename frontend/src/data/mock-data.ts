@@ -21,6 +21,9 @@ import type {
 const REF = Date.parse("2026-07-31T23:59:00");
 const iso = (daysAgo: number): string => new Date(REF - daysAgo * 86_400_000).toISOString();
 
+/** Fraîcheur affichée du jeu de données (lot « GBL - Juillet 2026 »). */
+export const DEMO_FRESHNESS = new Date(REF).toISOString();
+
 export const managers: UiManager[] = [
   { id: "mgr-1", name: "M. Essomba", role: "Département Recouvrement", agency: "Yaoundé Centre", workload: 118 },
   { id: "mgr-2", name: "C. Njoya", role: "Département Recouvrement", agency: "Douala Akwa", workload: 94 },
