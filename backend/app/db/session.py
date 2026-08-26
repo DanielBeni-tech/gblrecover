@@ -15,6 +15,8 @@ def _async_database_url(url: str) -> str:
 
 
 def _connect_args(url: str) -> dict:
+    if "sqlite" in url:
+        return {"check_same_thread": False}
     host = (urlparse(url).hostname or "").lower()
     if host in _LOCAL_DB_HOSTS:
         return {"ssl": False}
