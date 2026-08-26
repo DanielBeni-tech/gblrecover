@@ -172,40 +172,69 @@ with engine.begin() as conn:
     # SERVICES (already in schema.sql, skip if exists)
     print("  SERVICES: already seeded")
 
-    # FACTURES
-    colonnes_mois = [col for col in df.columns if re.search(r'(Facture|Impay)', str(col), re.IGNORECASE)]
-    if colonnes_mois:
-        print(f"  {len(colonnes_mois)} monthly columns detected")
-        df_long = pd.melt(df, id_vars=['num_compte'], value_vars=colonnes_mois, var_name='libelle_periode', value_name='montant_facture')
-        df_long['montant_facture'] = df_long['montant_facture'].apply(lambda x: 0.0 if pd.isna(x) else round(float(x), 2))
-        df_long = df_long[df_long['montant_facture'] != 0]
-        df_long['type_flux'] = df_long['libelle_periode'].apply(lambda x: 'IMPAYE' if 'mpay' in str(x).lower() else 'FACTURE')
+    # FACTURES : 1 ligne par (compte, mois). Facturé / Impayé / Payé ne sont pas mélangés.
+    mois_map = {'janvier': '01', 'février': '02', 'fevrier': '02', 'mars': '03', 'avril': '04', 'mai': '05', 'juin': '06', 'juillet': '07', 'août': '08', 'aout': '08', 'septembre': '09', 'octobre': '10', 'novembre': '11', 'décembre': '12', 'decembre': '12'}
+    def extract_date(lib):
+        lib = str(lib).lower()
+        annee = (re.search(r'20\d{2}', lib) or type('', (), {'group': lambda self, n: '2026'})()).group(0)
+        mois = '01'
+        for m, n in mois_map.items():
+            if m in lib:
+                mois = n
+                break
+        return f"{annee}-{mois}-01"
 
-        mois_map = {'janvier': '01', 'février': '02', 'fevrier': '02', 'mars': '03', 'avril': '04', 'mai': '05', 'juin': '06', 'juillet': '07', 'août': '08', 'aout': '08', 'septembre': '09', 'octobre': '10', 'novembre': '11', 'décembre': '12', 'decembre': '12'}
-        def extract_date(lib):
-            lib = str(lib).lower()
-            annee = (re.search(r'20\d{2}', lib) or type('', (), {'group': lambda self, n: '2026'})()).group(0)
-            mois = '01'
-            for m, n in mois_map.items():
-                if m in lib:
-                    mois = n
+    fact_cols = [c for c in df.columns if re.match(r'.+\s+Facture\s+\d{4}', str(c), re.IGNORECASE)]
+    imp_cols_map = {}
+    for ic in df.columns:
+        m = re.match(r'(.+?)\s+Impay', str(ic), re.IGNORECASE)
+        if m:
+            month_label = m.group(1).strip()
+            for fc in fact_cols:
+                if str(fc).startswith(month_label):
+                    imp_cols_map[fc] = ic
                     break
-            return f"{annee}-{mois}-01"
-        df_long['date_emission'] = df_long['libelle_periode'].apply(extract_date)
-        df_long['num_compte'] = df_long['num_compte'].astype(str)
-        df_long['id_facture'] = ('FAC_' + df_long['num_compte'] + '_' + df_long['libelle_periode'].str.replace(' ', '_').replace('/', '_')).str[:128]
-        factures = df_long[['id_facture', 'num_compte', 'date_emission', 'montant_facture', 'type_flux', 'libelle_periode']].drop_duplicates(subset=['id_facture'])
-        factures['num_compte'] = factures['num_compte'].astype(int)
-        factures = factures[factures['num_compte'].isin(comptes['num_compte'].unique())]
+
+    if fact_cols:
+        print(f"  {len(fact_cols)} mois facturés, {len(imp_cols_map)} paires Impayés")
+        df_fact = pd.melt(df, id_vars=['num_compte'], value_vars=fact_cols, var_name='col_facture', value_name='montant')
+        df_fact['montant'] = df_fact['montant'].apply(lambda x: 0.0 if pd.isna(x) else round(float(x), 2))
+        df_fact = df_fact[df_fact['montant'] > 0]
+        df_fact['date_emission'] = df_fact['col_facture'].apply(extract_date)
+
+        if imp_cols_map:
+            df_imp = pd.melt(df, id_vars=['num_compte'], value_vars=list(imp_cols_map.values()), var_name='col_impaye', value_name='impaye')
+            df_imp['impaye'] = df_imp['impaye'].apply(lambda x: 0.0 if pd.isna(x) else round(float(x), 2))
+            imp_to_fact = {v: k for k, v in imp_cols_map.items()}
+            df_imp['col_facture'] = df_imp['col_impaye'].map(imp_to_fact)
+            df_fact = df_fact.merge(df_imp[['num_compte', 'col_facture', 'impaye']], on=['num_compte', 'col_facture'], how='left')
+        else:
+            df_fact['impaye'] = 0.0
+
+        df_fact['impaye'] = df_fact['impaye'].fillna(0.0)
+        df_fact['impaye'] = df_fact[['impaye', 'montant']].min(axis=1)
+        df_fact['paid'] = (df_fact['montant'] - df_fact['impaye']).clip(lower=0).round(2)
+        df_fact['outstanding'] = df_fact['impaye']
+        df_fact['status'] = df_fact.apply(
+            lambda r: 'PAID' if r['outstanding'] <= 0 else ('PARTIAL' if r['paid'] > 0 else 'OPEN'),
+            axis=1,
+        )
+        df_fact['num_compte'] = df_fact['num_compte'].astype(int)
+        df_fact['id_facture'] = (
+            'FAC_' + df_fact['num_compte'].astype(str) + '_' + df_fact['col_facture'].str.replace(' ', '_').str.replace('/', '_')
+        ).str[:128]
+        df_fact = df_fact[df_fact['num_compte'].isin(comptes['num_compte'].unique())]
+        df_fact = df_fact.drop_duplicates(subset=['id_facture'])
 
         batch_insert(conn,
             "INSERT INTO facture (id_facture, num_compte, date_emission, montant_facture, paid_amount, outstanding_amount, status, type_flux, libelle_periode) "
-            "VALUES (:id, :nc, :de, :mf, 0, :mf, 'OPEN', :tf, :lp) ON CONFLICT (id_facture) DO NOTHING",
+            "VALUES (:id, :nc, :de, :mf, :pa, :ou, :st, 'FACTURE', :lp) ON CONFLICT (id_facture) DO NOTHING",
             [{'id': r['id_facture'], 'nc': int(r['num_compte']), 'de': r['date_emission'],
-              'mf': r['montant_facture'], 'tf': r['type_flux'], 'lp': r['libelle_periode']} for _, r in factures.iterrows()])
-        print(f"  FACTURES: {len(factures)}")
+              'mf': float(r['montant']), 'pa': float(r['paid']), 'ou': float(r['outstanding']),
+              'st': r['status'], 'lp': r['col_facture']} for _, r in df_fact.iterrows()])
+        print(f"  FACTURES: {len(df_fact)} (1 par compte/mois)")
     else:
-        print("  No monthly columns found")
+        print("  No monthly Facture columns found")
 
 # --- Create demo user ---
 with engine.begin() as conn:

@@ -129,7 +129,7 @@ with engine.begin() as conn:
     # SERVICES (seeded in schema.sql)
     print("  SERVICES: seeded")
 
-    # FACTURES
+    # FACTURES : 1 ligne par (compte, mois)
     mois_map = {'janvier':'01','février':'02','fevrier':'02','mars':'03','avril':'04','mai':'05',
                 'juin':'06','juillet':'07','août':'08','aout':'08','septembre':'09','octobre':'10',
                 'novembre':'11','décembre':'12','decembre':'12'}
@@ -141,28 +141,47 @@ with engine.begin() as conn:
             if mn in lib: m=n; break
         return f"{a}-{m}-01"
 
-    cols_mois = [c for c in df.columns if re.search(r'(Facture|Impay)', str(c), re.IGNORECASE)]
-    if cols_mois:
-        print(f"  {len(cols_mois)} monthly columns")
-        dfl = pd.melt(df, id_vars=['num_compte'], value_vars=cols_mois, var_name='lp', value_name='mf')
-        dfl['mf'] = dfl['mf'].apply(lambda x: 0.0 if pd.isna(x) else round(float(x), 2))
-        dfl = dfl[dfl['mf'] != 0]
-        dfl['tf'] = dfl['lp'].apply(lambda x: 'IMPAYE' if 'mpay' in str(x).lower() else 'FACTURE')
-        dfl['de'] = dfl['lp'].apply(edate)
-        dfl['nc'] = dfl['num_compte'].astype(str)
-        dfl['id'] = ('FAC_' + dfl['nc'] + '_' + dfl['lp'].str.replace(' ','_').str.replace('/','_')).str[:128]
-        fact = dfl[['id','nc','de','mf','tf','lp']].drop_duplicates(subset=['id'])
-        fact['nc'] = fact['nc'].astype(int)
-        valid = co['num_compte'].unique()
-        fact = fact[fact['nc'].isin(valid)]
+    fact_cols = [c for c in df.columns if re.match(r'.+\s+Facture\s+\d{4}', str(c), re.IGNORECASE)]
+    imp_cols_map = {}
+    for ic in df.columns:
+        m = re.match(r'(.+?)\s+Impay', str(ic), re.IGNORECASE)
+        if m:
+            month_label = m.group(1).strip()
+            for fc in fact_cols:
+                if str(fc).startswith(month_label):
+                    imp_cols_map[fc] = ic
+                    break
 
-        # Insert in large batches
-        sql_f = "INSERT INTO facture (id_facture, num_compte, date_emission, montant_facture, paid_amount, outstanding_amount, status, type_flux, libelle_periode) VALUES (:id,:nc,:de,:mf,0,:mf,'OPEN',:tf,:lp) ON CONFLICT DO NOTHING"
+    if fact_cols:
+        print(f"  {len(fact_cols)} mois facturés, {len(imp_cols_map)} paires Impayés")
+        dff = pd.melt(df, id_vars=['num_compte'], value_vars=fact_cols, var_name='col_facture', value_name='montant')
+        dff['montant'] = dff['montant'].apply(lambda x: 0.0 if pd.isna(x) else round(float(x), 2))
+        dff = dff[dff['montant'] > 0]
+        dff['de'] = dff['col_facture'].apply(edate)
+        if imp_cols_map:
+            dfi = pd.melt(df, id_vars=['num_compte'], value_vars=list(imp_cols_map.values()), var_name='col_impaye', value_name='impaye')
+            dfi['impaye'] = dfi['impaye'].apply(lambda x: 0.0 if pd.isna(x) else round(float(x), 2))
+            imp_to_fact = {v: k for k, v in imp_cols_map.items()}
+            dfi['col_facture'] = dfi['col_impaye'].map(imp_to_fact)
+            dff = dff.merge(dfi[['num_compte','col_facture','impaye']], on=['num_compte','col_facture'], how='left')
+        else:
+            dff['impaye'] = 0.0
+        dff['impaye'] = dff['impaye'].fillna(0.0)
+        dff['impaye'] = dff[['impaye','montant']].min(axis=1)
+        dff['paid'] = (dff['montant'] - dff['impaye']).clip(lower=0).round(2)
+        dff['ou'] = dff['impaye']
+        dff['st'] = dff.apply(lambda r: 'PAID' if r['ou'] <= 0 else ('PARTIAL' if r['paid'] > 0 else 'OPEN'), axis=1)
+        dff['nc'] = dff['num_compte'].astype(int)
+        dff['id'] = ('FAC_' + dff['nc'].astype(str) + '_' + dff['col_facture'].str.replace(' ','_').str.replace('/','_')).str[:128]
+        valid = co['num_compte'].unique()
+        dff = dff[dff['nc'].isin(valid)].drop_duplicates(subset=['id'])
+
+        sql_f = "INSERT INTO facture (id_facture, num_compte, date_emission, montant_facture, paid_amount, outstanding_amount, status, type_flux, libelle_periode) VALUES (:id,:nc,:de,:mf,:pa,:ou,:st,'FACTURE',:lp) ON CONFLICT DO NOTHING"
         insert_batch(conn, sql_f,
-                     [{'id':r['id'],'nc':int(r['nc']),'de':r['de'],'mf':r['mf'],'tf':r['tf'],'lp':r['lp']} for _,r in fact.iterrows()],
+                     [{'id':r['id'],'nc':int(r['nc']),'de':r['de'],'mf':float(r['montant']),'pa':float(r['paid']),'ou':float(r['ou']),'st':r['st'],'lp':r['col_facture']} for _,r in dff.iterrows()],
                      "FACTURES")
     else:
-        print("  No monthly columns")
+        print("  No monthly Facture columns")
 
     # DEMO USER
     exists = conn.execute(text("SELECT id FROM users WHERE email=:e"), {"e": DEMO_EMAIL}).fetchone()

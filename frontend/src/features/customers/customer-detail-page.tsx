@@ -362,6 +362,7 @@ export function CustomerDetailPage() {
                   <TableHead>Compte</TableHead>
                   <TableHead>Période</TableHead>
                   <TableHead className="text-right">Facturé</TableHead>
+                  <TableHead className="text-right">Payé</TableHead>
                   <TableHead className="text-right">Impayé</TableHead>
                   <TableHead>Statut</TableHead>
                 </tr>
@@ -373,11 +374,12 @@ export function CustomerDetailPage() {
                     <TableCell className="t-tabular text-on-surface-variant">{f.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(f.issueDate)}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(f.total)}</TableCell>
-                    <TableCell className={`t-tabular text-right font-semibold ${(f.total - f.paid) > 0 ? "text-error" : "text-on-surface"}`}>
-                      {xaf(f.total - f.paid)}
+                    <TableCell className="t-tabular text-right text-on-surface-variant">{xaf(f.paid)}</TableCell>
+                    <TableCell className={`t-tabular text-right font-semibold ${f.outstanding > 0 ? "text-error" : "text-on-surface"}`}>
+                      {xaf(f.outstanding)}
                     </TableCell>
                     <TableCell>
-                      <Badge tone={(f.total - f.paid) > 0 ? "error" : "success"}>{(f.total - f.paid) > 0 ? "Impayée" : "Payée"}</Badge>
+                      <Badge tone={f.outstanding > 0 ? "error" : "success"}>{f.outstanding > 0 ? "Impayée" : "Payée"}</Badge>
                     </TableCell>
                   </TableRow>
                 ))}

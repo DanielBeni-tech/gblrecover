@@ -338,7 +338,7 @@ SELECT
     COUNT(DISTINCT CASE WHEN sc.nb_comptes > 1 THEN cl.code_client END) AS nombre_clients_multi_comptes,
     
     -- Concentration des impayés (via TYPE_FLUX = 'IMPAYE')
-    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_impayes_fcfa,
+    SUM(COALESCE(f.outstanding_amount, 0)) AS total_impayes_fcfa,
     
     -- Taux de pénétration E-Bill
     COUNT(DISTINCT CASE WHEN LOWER(cp.e_bill::text) IN ('true', '1', 'oui', 'y', 'yes') THEN cp.num_compte END) AS comptes_ebill,
@@ -385,8 +385,8 @@ CREATE OR REPLACE VIEW vw_analyse_centres_agences AS
 WITH stats_factures_agence AS (
     SELECT 
         cp.id_agence,
-        SUM(CASE WHEN f.type_flux = 'FACTURE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_facture_fcfa,
-        SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_impaye_flux_fcfa
+        SUM(COALESCE(f.montant_facture, 0)) AS total_facture_fcfa,
+        SUM(COALESCE(f.outstanding_amount, 0)) AS total_impaye_flux_fcfa
     FROM compte cp
     JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
     GROUP BY cp.id_agence
@@ -498,8 +498,8 @@ CREATE OR REPLACE VIEW vw_analyse_gestionnaires AS
 WITH stats_factures_gest AS (
     SELECT 
         cp.mat_gestionnaire,
-        SUM(CASE WHEN f.type_flux = 'FACTURE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_facture_fcfa,
-        SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_impaye_flux_fcfa
+        SUM(COALESCE(f.montant_facture, 0)) AS total_facture_fcfa,
+        SUM(COALESCE(f.outstanding_amount, 0)) AS total_impaye_flux_fcfa
     FROM compte cp
     JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
     WHERE cp.mat_gestionnaire IS NOT NULL AND TRIM(cp.mat_gestionnaire) <> ''
@@ -615,8 +615,8 @@ CREATE OR REPLACE VIEW vw_analyse_gestionnaires_avec_impaye AS
 WITH stats_factures_gest AS (
     SELECT 
         cp.mat_gestionnaire,
-        SUM(CASE WHEN f.type_flux = 'FACTURE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_facture_fcfa,
-        SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN COALESCE(f.montant_facture, 0) ELSE 0 END) AS total_impaye_flux_fcfa
+        SUM(COALESCE(f.montant_facture, 0)) AS total_facture_fcfa,
+        SUM(COALESCE(f.outstanding_amount, 0)) AS total_impaye_flux_fcfa
     FROM compte cp
     JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
     WHERE cp.mat_gestionnaire IS NOT NULL AND TRIM(cp.mat_gestionnaire) <> ''
@@ -806,7 +806,7 @@ WITH impayes_mensuels AS (
         DATE_TRUNC('month', date_emission) AS mois,
         SUM(montant_facture) AS impaye_mois
     FROM facture
-    WHERE type_flux = 'IMPAYE'
+    WHERE outstanding_amount > 0
     GROUP BY num_compte, DATE_TRUNC('month', date_emission)
 ),
 comparaison_mensuelle AS (
@@ -838,8 +838,8 @@ WITH flux_mensuels AS (
     SELECT 
         num_compte,
         DATE_TRUNC('month', date_emission) AS mois,
-        SUM(CASE WHEN type_flux = 'FACTURE' THEN montant_facture ELSE 0 END) AS total_facture,
-        SUM(CASE WHEN type_flux = 'IMPAYE' THEN montant_facture ELSE 0 END) AS total_impaye
+        SUM(COALESCE(montant_facture, 0)) AS total_facture,
+        SUM(COALESCE(outstanding_amount, 0)) AS total_impaye
     FROM facture
     GROUP BY num_compte, DATE_TRUNC('month', date_emission)
 ),
@@ -875,12 +875,12 @@ SELECT
     EXTRACT(MONTH FROM date_emission) AS numero_mois,
     TO_CHAR(date_emission, 'Month') AS nom_mois,
     COUNT(DISTINCT num_compte) AS nb_comptes_impactes,
-    SUM(CASE WHEN type_flux = 'FACTURE' THEN montant_facture ELSE 0 END) AS total_facture_fcfa,
-    SUM(CASE WHEN type_flux = 'IMPAYE' THEN montant_facture ELSE 0 END) AS total_impaye_fcfa,
+    SUM(COALESCE(montant_facture, 0)) AS total_facture_fcfa,
+    SUM(COALESCE(outstanding_amount, 0)) AS total_impaye_fcfa,
     ROUND(
         (
-            SUM(CASE WHEN type_flux = 'IMPAYE' THEN montant_facture ELSE 0 END) * 100.0 / 
-            NULLIF(SUM(CASE WHEN type_flux = 'FACTURE' THEN montant_facture ELSE 0 END), 0)
+            SUM(COALESCE(outstanding_amount, 0)) * 100.0 / 
+            NULLIF(SUM(COALESCE(montant_facture, 0)), 0)
         )::numeric, 2
     ) AS taux_impaye_mensuel_pct
 FROM facture
@@ -905,12 +905,12 @@ WITH premiere_facture AS (
 SELECT 
     pf.cohorte_mois,
     COUNT(DISTINCT pf.code_client) AS taille_cohorte_clients,
-    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS volume_facture_total_fcfa,
-    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS volume_impaye_total_fcfa,
+    SUM(COALESCE(f.montant_facture, 0)) AS volume_facture_total_fcfa,
+    SUM(COALESCE(f.outstanding_amount, 0)) AS volume_impaye_total_fcfa,
     ROUND(
         (
-            SUM(CASE WHEN type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) * 100.0 / 
-            NULLIF(SUM(CASE WHEN type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END), 0)
+            SUM(COALESCE(f.outstanding_amount, 0)) * 100.0 / 
+            NULLIF(SUM(COALESCE(f.montant_facture, 0)), 0)
         )::numeric, 2
     ) AS taux_impaye_cohorte_pct
 FROM premiere_facture pf
@@ -936,7 +936,7 @@ SELECT
     SUM(f.montant_facture) AS total_impaye_cumule_fcfa
 FROM compte cp
 JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
-WHERE f.type_flux = 'IMPAYE'
+WHERE f.outstanding_amount > 0
 GROUP BY cp.code_client, cp.num_compte;
 
 
@@ -1233,12 +1233,12 @@ CREATE OR REPLACE VIEW vw_ebill_adoption AS
 SELECT 
     COALESCE(cp.e_bill, 'NON SPÉCIFIÉ') AS statut_ebill,
     COUNT(DISTINCT cp.num_compte) AS nb_comptes,
-    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture_fcfa,
-    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye_fcfa,
+    SUM(COALESCE(f.montant_facture, 0)) AS total_facture_fcfa,
+    SUM(COALESCE(f.outstanding_amount, 0)) AS total_impaye_fcfa,
     ROUND(
         (
-            SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) * 100.0 / 
-            NULLIF(SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END), 0)
+            SUM(COALESCE(f.outstanding_amount, 0)) * 100.0 / 
+            NULLIF(SUM(COALESCE(f.montant_facture, 0)), 0)
         )::numeric, 2
     ) AS taux_impaye_pct
 FROM compte cp
@@ -1364,7 +1364,7 @@ WITH impayes_clients AS (
     FROM compte cp
     JOIN client cl ON cp.code_client = cl.code_client
     JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
-    WHERE f.type_flux = 'IMPAYE'
+    WHERE f.outstanding_amount > 0
     GROUP BY cp.code_client, cl.raison_sociale
 ),
 cumul_impayes AS (
@@ -1430,12 +1430,12 @@ SELECT
     g.nom_gestionnaire,
     cl.marche,
     COUNT(DISTINCT cp.num_compte) AS nb_comptes_geres,
-    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture_fcfa,
-    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye_fcfa,
+    SUM(COALESCE(f.montant_facture, 0)) AS total_facture_fcfa,
+    SUM(COALESCE(f.outstanding_amount, 0)) AS total_impaye_fcfa,
     ROUND(
         (
-            SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) * 100.0 / 
-            NULLIF(SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END), 0)
+            SUM(COALESCE(f.outstanding_amount, 0)) * 100.0 / 
+            NULLIF(SUM(COALESCE(f.montant_facture, 0)), 0)
         )::numeric, 2
     ) AS taux_impaye_pct
 FROM gestionnaire g
@@ -1486,7 +1486,7 @@ totaux_impayes AS (
         num_compte,
         SUM(montant_facture) AS impaye_total
     FROM facture
-    WHERE type_flux = 'IMPAYE'
+    WHERE outstanding_amount > 0
     GROUP BY num_compte
 )
 SELECT 
@@ -1533,8 +1533,8 @@ WITH historique_mensuel AS (
     SELECT 
         num_compte,
         DATE_TRUNC('month', date_emission) AS mois,
-        SUM(CASE WHEN type_flux = 'FACTURE' THEN montant_facture ELSE 0 END) AS fact,
-        SUM(CASE WHEN type_flux = 'IMPAYE' THEN montant_facture ELSE 0 END) AS imp
+        SUM(COALESCE(montant_facture, 0)) AS fact,
+        SUM(COALESCE(outstanding_amount, 0)) AS imp
     FROM facture
     GROUP BY num_compte, DATE_TRUNC('month', date_emission)
 ),
@@ -1590,12 +1590,12 @@ CREATE OR REPLACE VIEW vw_analyse_fiscalite_recouvrement AS
 SELECT 
     COALESCE(cp.statut_facturation, 'NON SPÉCIFIÉ') AS type_facturation,
     COUNT(DISTINCT cp.num_compte) AS nb_comptes,
-    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture_fcfa,
-    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye_fcfa,
+    SUM(COALESCE(f.montant_facture, 0)) AS total_facture_fcfa,
+    SUM(COALESCE(f.outstanding_amount, 0)) AS total_impaye_fcfa,
     ROUND(
         (
-            SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) * 100.0 / 
-            NULLIF(SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END), 0)
+            SUM(COALESCE(f.outstanding_amount, 0)) * 100.0 / 
+            NULLIF(SUM(COALESCE(f.montant_facture, 0)), 0)
         )::numeric, 2
     ) AS taux_impaye_pct
 FROM compte cp
@@ -1611,12 +1611,12 @@ CREATE OR REPLACE VIEW vw_cycle_facturation_performance AS
 SELECT 
     cp.statut_facturation AS cycle_ou_statut_facturation,
     COUNT(DISTINCT cp.num_compte) AS nombre_comptes,
-    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture_fcfa,
-    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye_fcfa,
+    SUM(COALESCE(f.montant_facture, 0)) AS total_facture_fcfa,
+    SUM(COALESCE(f.outstanding_amount, 0)) AS total_impaye_fcfa,
     ROUND(
         (
-            SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) * 100.0 / 
-            NULLIF(SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END), 0)
+            SUM(COALESCE(f.outstanding_amount, 0)) * 100.0 / 
+            NULLIF(SUM(COALESCE(f.montant_facture, 0)), 0)
         )::numeric, 2
     ) AS taux_impaye_pct
 FROM compte cp
@@ -1631,19 +1631,19 @@ DROP VIEW IF EXISTS vw_capacite_paiement_temporelle CASCADE;
 CREATE OR REPLACE VIEW vw_capacite_paiement_temporelle AS
 SELECT 
     DATE_TRUNC('month', date_emission) AS mois,
-    SUM(CASE WHEN type_flux = 'FACTURE' THEN montant_facture ELSE 0 END) AS total_facture_fcfa,
-    SUM(CASE WHEN type_flux = 'IMPAYE' THEN montant_facture ELSE 0 END) AS total_impaye_fcfa,
+    SUM(COALESCE(montant_facture, 0)) AS total_facture_fcfa,
+    SUM(COALESCE(outstanding_amount, 0)) AS total_impaye_fcfa,
     (
-        SUM(CASE WHEN type_flux = 'FACTURE' THEN montant_facture ELSE 0 END) - 
-        SUM(CASE WHEN type_flux = 'IMPAYE' THEN montant_facture ELSE 0 END)
+        SUM(COALESCE(montant_facture, 0)) - 
+        SUM(COALESCE(outstanding_amount, 0))
     ) AS capacite_paiement_encaissee_fcfa,
     ROUND(
         (
             (
-                SUM(CASE WHEN type_flux = 'FACTURE' THEN montant_facture ELSE 0 END) - 
-                SUM(CASE WHEN type_flux = 'IMPAYE' THEN montant_facture ELSE 0 END)
+                SUM(COALESCE(montant_facture, 0)) - 
+                SUM(COALESCE(outstanding_amount, 0))
             ) * 100.0 / 
-            NULLIF(SUM(CASE WHEN type_flux = 'FACTURE' THEN montant_facture ELSE 0 END), 0)
+            NULLIF(SUM(COALESCE(montant_facture, 0)), 0)
         )::numeric, 2
     ) AS taux_recouvrement_effectif_pct
 FROM facture
@@ -1781,7 +1781,7 @@ SELECT
     MIN(date_emission) AS date_premiere_facture_impayee,
     (CURRENT_DATE - MIN(date_emission)) AS anciennete_max_jours
 FROM facture
-WHERE type_flux = 'IMPAYE'
+WHERE outstanding_amount > 0
 GROUP BY num_compte;
 
 
@@ -1836,7 +1836,7 @@ FROM client cl
 JOIN compte cp ON cl.code_client = cp.code_client
 JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED'
 WHERE UPPER(cl.marche) LIKE '%OFF%'
-  AND f.type_flux = 'IMPAYE'
+  AND f.outstanding_amount > 0
   AND (CURRENT_DATE - f.date_emission) > 90;
 
 

@@ -25,6 +25,7 @@ interface InvoiceRow {
   issueDate: string;
   total: number;
   paid: number;
+  outstanding: number;
   status: string;
 }
 
@@ -32,8 +33,7 @@ interface InvoiceRow {
 function toRow(inv: Invoice): InvoiceRow {
   const total = inv.montant_facture ?? 0;
   const paid = inv.paid_amount ?? 0;
-  const outstanding = inv.outstanding_amount ?? total - paid;
-  // Statut dérivé : "Impayée" si outstanding > 0, "Payée" sinon
+  const outstanding = inv.outstanding_amount ?? Math.max(0, total - paid);
   const derivedStatus = outstanding > 0 ? "OPEN" : "PAID";
   return {
     id: inv.id_facture,
@@ -42,6 +42,7 @@ function toRow(inv: Invoice): InvoiceRow {
     issueDate: inv.date_emission ?? "",
     total,
     paid,
+    outstanding,
     status: derivedStatus,
   };
 }
@@ -142,6 +143,7 @@ export function InvoicesPage() {
                   <TableHead>Compte</TableHead>
                   <TableHead>Période</TableHead>
                   <TableHead className="text-right">Facturé</TableHead>
+                  <TableHead className="text-right">Payé</TableHead>
                   <TableHead className="text-right">Impayé</TableHead>
                   <TableHead>Statut</TableHead>
                 </tr>
@@ -153,8 +155,9 @@ export function InvoicesPage() {
                     <TableCell className="t-tabular text-on-surface-variant">{f.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(f.issueDate)}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(f.total)}</TableCell>
-                    <TableCell className={`t-tabular text-right font-semibold ${f.total - f.paid > 0 ? "text-error" : "text-on-surface"}`}>
-                      {xaf(f.total - f.paid)}
+                    <TableCell className="t-tabular text-right text-on-surface-variant">{xaf(f.paid)}</TableCell>
+                    <TableCell className={`t-tabular text-right font-semibold ${f.outstanding > 0 ? "text-error" : "text-on-surface"}`}>
+                      {xaf(f.outstanding)}
                     </TableCell>
                     <TableCell>
                       <Badge tone={f.status === "PAID" ? "success" : "error"}>{f.status === "PAID" ? "Payée" : "Impayée"}</Badge>

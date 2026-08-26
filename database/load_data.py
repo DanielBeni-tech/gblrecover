@@ -402,24 +402,46 @@ def main():
         to_insert.to_sql('service', engine, if_exists='append', index=False)
     print(f"    ✅ {len(to_insert)} services importés (skipped {len(services) - len(to_insert)} existing)")
 
-    print("  → Table FACTURE...")
-    colonnes_mois = [col for col in df.columns if re.search(r'(Facture|Impayé|Impayes|Décembre|Janvier|Février)', str(col), re.IGNORECASE)]
+    print("  → Table FACTURE (1 ligne par compte/mois : Facturé / Impayé / Payé)...")
+    fact_cols = [col for col in df.columns if re.match(r'.+\s+Facture\s+\d{4}', str(col), re.IGNORECASE)]
+    imp_cols_map = {}
+    for ic in df.columns:
+        m = re.match(r'(.+?)\s+Impay', str(ic), re.IGNORECASE)
+        if m:
+            month_label = m.group(1).strip()
+            for fc in fact_cols:
+                if str(fc).startswith(month_label):
+                    imp_cols_map[fc] = ic
+                    break
 
-    if colonnes_mois:
-        print(f"    📋 {len(colonnes_mois)} colonnes mensuelles détectées")
-        df_long = pd.melt(df, id_vars=['num_compte'], value_vars=colonnes_mois, var_name='libelle_periode', value_name='montant_facture')
-        df_long['montant_facture'] = df_long['montant_facture'].apply(clean_amount)
-        df_long = df_long[df_long['montant_facture'] != 0]
-        df_long['type_flux'] = df_long['libelle_periode'].apply(detect_type_flux)
-        df_long['date_emission'] = df_long['libelle_periode'].apply(extract_date_from_libelle)
-        df_long['num_compte'] = df_long['num_compte'].astype(str)
-        df_long['id_facture'] = 'FAC_' + df_long['num_compte'] + '_' + df_long['libelle_periode'].str.replace(' ', '_').replace('/', '_')
-        df_long['id_facture'] = df_long['id_facture'].str.slice(0, 128)
-        df_long['paid_amount'] = 0.0
-        df_long['outstanding_amount'] = df_long['montant_facture']
-        df_long['status'] = 'OPEN'
+    if fact_cols:
+        print(f"    📋 {len(fact_cols)} mois facturés, {len(imp_cols_map)} paires Impayés")
+        df_fact = pd.melt(df, id_vars=['num_compte'], value_vars=fact_cols, var_name='libelle_periode', value_name='montant_facture')
+        df_fact['montant_facture'] = df_fact['montant_facture'].apply(clean_amount)
+        df_fact = df_fact[df_fact['montant_facture'] > 0]
+        df_fact['date_emission'] = df_fact['libelle_periode'].apply(extract_date_from_libelle)
 
-        factures = df_long[['id_facture', 'num_compte', 'date_emission', 'montant_facture', 'paid_amount', 'outstanding_amount', 'status', 'type_flux', 'libelle_periode']].drop_duplicates(subset=['id_facture'])
+        if imp_cols_map:
+            df_imp = pd.melt(df, id_vars=['num_compte'], value_vars=list(imp_cols_map.values()), var_name='col_impaye', value_name='impaye')
+            df_imp['impaye'] = df_imp['impaye'].apply(clean_amount)
+            imp_to_fact = {v: k for k, v in imp_cols_map.items()}
+            df_imp['libelle_periode'] = df_imp['col_impaye'].map(imp_to_fact)
+            df_fact = df_fact.merge(df_imp[['num_compte', 'libelle_periode', 'impaye']], on=['num_compte', 'libelle_periode'], how='left')
+        else:
+            df_fact['impaye'] = 0.0
+
+        df_fact['impaye'] = df_fact['impaye'].fillna(0.0)
+        df_fact['outstanding_amount'] = df_fact[['impaye', 'montant_facture']].min(axis=1)
+        df_fact['paid_amount'] = (df_fact['montant_facture'] - df_fact['outstanding_amount']).clip(lower=0).round(2)
+        df_fact['status'] = df_fact.apply(
+            lambda r: 'PAID' if r['outstanding_amount'] <= 0 else ('PARTIAL' if r['paid_amount'] > 0 else 'OPEN'),
+            axis=1,
+        )
+        df_fact['type_flux'] = 'FACTURE'
+        df_fact['num_compte'] = df_fact['num_compte'].astype(str)
+        df_fact['id_facture'] = ('FAC_' + df_fact['num_compte'] + '_' + df_fact['libelle_periode'].str.replace(' ', '_').replace('/', '_')).str.slice(0, 128)
+
+        factures = df_fact[['id_facture', 'num_compte', 'date_emission', 'montant_facture', 'paid_amount', 'outstanding_amount', 'status', 'type_flux', 'libelle_periode']].drop_duplicates(subset=['id_facture'])
         factures['num_compte'] = factures['num_compte'].astype(int)
         comptes_valides = comptes['num_compte'].unique()
         factures = factures[factures['num_compte'].isin(comptes_valides)]

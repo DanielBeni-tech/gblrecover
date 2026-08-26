@@ -527,7 +527,7 @@ async def get_receivable_summary(db: AsyncSession, account_id: int):
         select(
             func.coalesce(func.sum(Facture.outstanding_amount), 0),
             func.coalesce(func.sum(func.case((Facture.date_emission < func.current_date(), Facture.outstanding_amount), else_=0)), 0),
-            func.count(Facture.id_facture),
+            func.coalesce(func.sum(func.case((Facture.outstanding_amount > 0, 1), else_=0)), 0),
         )
         .where(Facture.num_compte == account_id)
     )
@@ -977,8 +977,9 @@ async def dashboard_summary(db, centres: list[str] | None = None, agences: list[
 
     sql_fac = f"""
         SELECT
-            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) AS total_facture_mois,
-            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_impaye_mois
+            COALESCE(SUM(f.montant_facture), 0) AS total_facture_mois,
+            COALESCE(SUM(f.outstanding_amount), 0) AS total_impaye_mois,
+            COALESCE(SUM(f.paid_amount), 0) AS total_paye_mois
         FROM facture f
         JOIN compte cp ON f.num_compte = cp.num_compte
         JOIN agence a ON cp.id_agence = a.id_agence
@@ -987,8 +988,7 @@ async def dashboard_summary(db, centres: list[str] | None = None, agences: list[
     row_fac = (await db.execute(text(sql_fac), params)).mappings().first()
     total_facture = float(row_fac["total_facture_mois"] or 0)
     total_impaye = float(row_fac["total_impaye_mois"] or 0)
-    # Convention : "payé" = facturé - impayé (source Excel sans données de paiement)
-    total_paye = max(0, total_facture - total_impaye)
+    total_paye = float(row_fac["total_paye_mois"] or 0)
     taux = round(total_paye * 100.0 / total_facture, 2) if total_facture else 0
 
     return [{
@@ -1036,10 +1036,9 @@ async def dashboard_trend(db, centres: list[str] | None = None, agences: list[st
     sql = f"""
         SELECT
             TO_CHAR(date_trunc('month', f.date_emission), 'YYYY-MM') AS mois_emission,
-            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) AS total_facture,
-            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_impaye,
-            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) -
-            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_recouvre
+            COALESCE(SUM(f.montant_facture), 0) AS total_facture,
+            COALESCE(SUM(f.outstanding_amount), 0) AS total_impaye,
+            COALESCE(SUM(f.paid_amount), 0) AS total_recouvre
         FROM facture f
         JOIN compte cp ON f.num_compte = cp.num_compte
         JOIN agence a ON cp.id_agence = a.id_agence

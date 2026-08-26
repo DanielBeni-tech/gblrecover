@@ -916,17 +916,23 @@ export async function getCustomer(id: string): Promise<UiCustomerDetail> {
   const first = accounts[0];
 
   const allInvoices: UiInvoice[] = perAccount.flatMap(({ invoices }) =>
-    invoices.map((inv) => ({
-      id: inv.id_facture,
-      number: inv.id_facture,
-      customerId: id,
-      accountNumber: String(inv.num_compte),
-      issueDate: inv.date_emission ?? "",
-      dueDate: inv.date_emission ?? "",
-      total: num(inv.montant_facture),
-      paid: num(inv.paid_amount),
-      status: inv.status ?? "—",
-    })),
+    invoices.map((inv) => {
+      const total = num(inv.montant_facture);
+      const paid = num(inv.paid_amount);
+      const outstanding = num(inv.outstanding_amount ?? Math.max(0, total - paid));
+      return {
+        id: inv.id_facture,
+        number: inv.id_facture,
+        customerId: id,
+        accountNumber: String(inv.num_compte),
+        issueDate: inv.date_emission ?? "",
+        dueDate: inv.date_emission ?? "",
+        total,
+        paid,
+        outstanding,
+        status: outstanding > 0 ? (paid > 0 ? "PARTIAL" : "OPEN") : "PAID",
+      };
+    }),
   );
 
   const allPayments: UiPayment[] = perAccount.flatMap(({ payments }) =>
@@ -953,7 +959,7 @@ export async function getCustomer(id: string): Promise<UiCustomerDetail> {
   }
 
   const allReceivables: UiReceivable[] = allInvoices
-    .filter((inv) => inv.total - inv.paid > 0)
+    .filter((inv) => inv.outstanding > 0)
     .map((inv) => {
       const issue = inv.issueDate ? new Date(inv.issueDate) : new Date();
       const ageDays = Math.max(0, Math.floor((Date.now() - issue.getTime()) / 86_400_000));
@@ -963,7 +969,7 @@ export async function getCustomer(id: string): Promise<UiCustomerDetail> {
         accountNumber: inv.accountNumber,
         invoiceNumber: inv.number,
         initial: inv.total,
-        balance: inv.total - inv.paid,
+        balance: inv.outstanding,
         ageDays,
         dueDate: inv.dueDate,
         status: ageDays > 90 ? "urgente" : ageDays > 30 ? "en_retard" : "normale",

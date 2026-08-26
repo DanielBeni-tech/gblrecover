@@ -346,6 +346,7 @@ export interface UiInvoice {
   dueDate: string;
   total: number;
   paid: number;
+  outstanding: number;
   status: string;
 }
 
