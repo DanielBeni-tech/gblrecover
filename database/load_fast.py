@@ -10,13 +10,14 @@ from passlib.context import CryptContext
 
 # --- Config ---
 USER = os.getenv("POSTGRES_USER", "postgres")
-PASSWORD = os.getenv("POSTGRES_PASSWORD", "Adzaba1983")
+PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 HOST = os.getenv("POSTGRES_HOST", "localhost")
 PORT = os.getenv("POSTGRES_PORT", "5432")
 DB_NAME = os.getenv("POSTGRES_DB", "gblrecover")
 DEMO_EMAIL = os.getenv("DEMO_EMAIL", "agent@camtel.cm")
 DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "demo1234")
 BATCH_ID = str(uuid4())
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _BCRYPT_MAX_BYTES = 72
@@ -27,10 +28,23 @@ def _truncate_for_bcrypt(pw):
 def hash_password(pw):
     return pwd_context.hash(_truncate_for_bcrypt(pw))
 
-engine = create_engine(f"postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}")
+engine = create_engine(
+    DATABASE_URL or f"postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{DB_NAME}"
+)
+
+file_path = os.path.join(os.path.dirname(__file__), "GBL - Juillet 2026.xlsx")
+if os.getenv("LOAD_IF_EMPTY", "").lower() in ("1", "true", "yes"):
+    with engine.connect() as conn:
+        n = conn.execute(text("SELECT COUNT(*) FROM compte")).scalar() or 0
+    if n:
+        print(f"Portefeuille déjà chargé ({n} comptes) — import ignoré.")
+        sys.exit(0)
+
+if not os.path.isfile(file_path):
+    print(f"Fichier Excel introuvable : {file_path}", file=sys.stderr)
+    sys.exit(1)
 
 # --- Read Excel ---
-file_path = os.path.join(os.path.dirname(__file__), "GBL - Juillet 2026.xlsx")
 df = pd.read_excel(file_path)
 df.columns = df.columns.str.strip()
 print(f"Loaded {len(df)} rows, {len(df.columns)} columns")
