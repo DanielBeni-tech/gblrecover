@@ -23,7 +23,6 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { OrgCascadeFilters } from "@/components/filters/org-cascade-filters";
-import { ModuleNav } from "@/components/ui/module-nav";
 import { xaf } from "@/lib/format";
 
 const PAGE_SIZE = 50;
@@ -158,7 +157,6 @@ export function ClientsPage() {
           </Button>
         }
       />
-      <ModuleNav />
 
       <Card className="p-4">
         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-12">

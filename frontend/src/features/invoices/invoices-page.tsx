@@ -13,7 +13,6 @@ import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { xaf, dateFr } from "@/lib/format";
-import { ModuleNav } from "@/components/ui/module-nav";
 
 const PAGE_SIZE = 50;
 
@@ -92,7 +91,6 @@ export function InvoicesPage() {
   return (
     <>
       <PageHeader title="Factures" subtitle="Consultez les factures émises, leurs statuts et les soldes restants." />
-      <ModuleNav />
       <Card className="p-4">
         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-12">
           <div className="md:col-span-8">

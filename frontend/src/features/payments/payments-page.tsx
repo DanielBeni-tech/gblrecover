@@ -11,7 +11,6 @@ import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { xaf, dateFr } from "@/lib/format";
-import { ModuleNav } from "@/components/ui/module-nav";
 
 const PAGE_SIZE = 10;
 
@@ -63,7 +62,6 @@ export function PaymentsPage() {
   return (
     <>
       <PageHeader title="Paiements" subtitle="Vérifiez les encaissements reçus et leurs imputations." />
-      <ModuleNav />
       <Card className="p-4">
         <div className="md:w-1/2">
           <Label htmlFor="p-q">Recherche</Label>
