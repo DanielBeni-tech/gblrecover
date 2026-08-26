@@ -23,6 +23,35 @@ async def read_clients(
     return await crud.get_clients(db, q=q, status=status, client_type=client_type, marche=marche, page=page, page_size=page_size)
 
 
+# IMPORTANT: /clients/count must be BEFORE /clients/{client_id} to avoid
+# FastAPI matching "count" as a client_id.
+@router.get("/clients/count")
+async def count_clients(
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    marche: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return {"total": await crud.count_clients(db, q=q, status=status, marche=marche)}
+
+
+@router.get("/clients/list")
+async def list_clients_agg(
+    q: Optional[str] = Query(None),
+    marche: Optional[str] = Query(None),
+    centre: Optional[str] = Query(None),
+    agence: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """Liste paginée de clients avec agrégations financières en une seule requête."""
+    rows = await crud.get_clients_list(db, q=q, marche=marche, centre=centre, agence=agence, page=page, page_size=page_size)
+    total = await crud.count_clients(db, q=q, marche=marche)
+    return {"total": total, "items": [dict(r) for r in rows]}
+
+
 @router.get("/clients/{client_id}", response_model=schemas.ClientRead)
 async def read_client(client_id: int, db: AsyncSession = Depends(get_db)):
     client = await crud.get_client(db, client_id)
@@ -68,6 +97,36 @@ async def read_client_summary(client_id: int, db: AsyncSession = Depends(get_db)
 @router.get("/clients/{client_id}/history", response_model=list[schemas.ClientHistoryItem])
 async def read_client_history(client_id: int, db: AsyncSession = Depends(get_db)):
     return await crud.get_client_history(db, client_id)
+
+
+@router.get("/clients/{client_id}/invoices", response_model=list[schemas.InvoiceRead])
+async def client_invoices(
+    client_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(200, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    return await crud.get_client_invoices(db, client_id, page=page, page_size=page_size)
+
+
+@router.get("/clients/{client_id}/invoices/count")
+async def client_invoices_count(client_id: int, db: AsyncSession = Depends(get_db)):
+    return {"total": await crud.count_client_invoices(db, client_id)}
+
+
+@router.get("/clients/{client_id}/payments", response_model=list[schemas.PaymentRead])
+async def client_payments(
+    client_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(200, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    return await crud.get_client_payments(db, client_id, page=page, page_size=page_size)
+
+
+@router.get("/clients/{client_id}/payments/count")
+async def client_payments_count(client_id: int, db: AsyncSession = Depends(get_db)):
+    return {"total": await crud.count_client_payments(db, client_id)}
 
 
 @router.post("/clients/merge", response_model=schemas.ClientRead)

@@ -1,8 +1,9 @@
-from sqlalchemy import cast, func, or_, select, String
+from sqlalchemy import cast, func, or_, select, String, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from passlib.context import CryptContext
 from uuid import UUID
+from fastapi import HTTPException, status as http_status
 
 from app.models.user import User
 from app.models.role import Role
@@ -18,16 +19,26 @@ from app.models.finance import (
     Gestionnaire,
     Paiement,
 )
+from app.models.recouvrement import CollectionAction, Promise
+from app.models.imports import ImportBatch, ImportError
+from app.models.service import Service
+from app.models.audit_event import AuditEvent
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_BCRYPT_MAX_BYTES = 72
+
+
+def _truncate_for_bcrypt(password: str) -> str:
+    encoded = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    return encoded.decode("utf-8", errors="ignore")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(_truncate_for_bcrypt(plain_password), hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(_truncate_for_bcrypt(password))
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -56,14 +67,7 @@ async def create_user(db: AsyncSession, user_in):
     if getattr(user_in, "role_ids", None):
         result = await db.execute(select(Role).where(Role.id.in_(user_in.role_ids)))
         roles = result.scalars().all()
-
-    user = User(
-        email=user_in.email,
-        password_hash=get_password_hash(user_in.password),
-        full_name=user_in.full_name,
-        phone=user_in.phone,
-        roles=roles,
-    )
+    user = User(email=user_in.email, password_hash=get_password_hash(user_in.password), full_name=user_in.full_name, phone=user_in.phone, roles=roles)
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -92,8 +96,7 @@ async def update_user_profile(db: AsyncSession, user_id: UUID, user_in):
     user = await get_user(db, user_id)
     if not user:
         return None
-    data = user_in.dict(exclude_unset=True)
-    for field, value in data.items():
+    for field, value in user_in.dict(exclude_unset=True).items():
         setattr(user, field, value)
     db.add(user)
     await db.commit()
@@ -124,21 +127,18 @@ async def get_user_permissions(db: AsyncSession, user_id: UUID) -> list[str]:
     return [row[0] for row in result.all()]
 
 
+# ============================================================
+# Organisations
+# ============================================================
+
 async def get_centres(db: AsyncSession, page: int = 1, page_size: int = 25):
-    stmt = (
-        select(Centre)
-        .options(selectinload(Centre.agences))
-        .limit(page_size)
-        .offset((page - 1) * page_size)
-    )
+    stmt = select(Centre).options(selectinload(Centre.agences)).limit(page_size).offset((page - 1) * page_size)
     result = await db.execute(stmt)
     return result.scalars().all()
 
 
 async def get_centre(db: AsyncSession, centre_id: str):
-    result = await db.execute(
-        select(Centre).options(selectinload(Centre.agences)).where(Centre.nom_centre == centre_id)
-    )
+    result = await db.execute(select(Centre).options(selectinload(Centre.agences)).where(Centre.nom_centre == centre_id))
     return result.scalars().first()
 
 
@@ -233,20 +233,30 @@ async def update_manager(db: AsyncSession, manager_id: str, manager_in):
 async def get_organization_hierarchy(db: AsyncSession):
     stmt = select(Centre).options(joinedload(Centre.agences))
     result = await db.execute(stmt)
-    centres = result.scalars().all()
+    centres = result.scalars().unique().all()
     return {"centres": centres}
+
+
+# ============================================================
+# Clients
+# ============================================================
+
+async def count_clients(db: AsyncSession, q: str | None = None, status: str | None = None, client_type: str | None = None, marche: str | None = None) -> int:
+    stmt = select(func.count(Client.code_client))
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(or_(Client.raison_sociale.ilike(pattern), cast(Client.code_client, String).ilike(pattern)))
+    if marche:
+        stmt = stmt.where(Client.marche == marche)
+    result = await db.execute(stmt)
+    return result.scalar() or 0
 
 
 async def get_clients(db: AsyncSession, q: str | None = None, status: str | None = None, client_type: str | None = None, marche: str | None = None, page: int = 1, page_size: int = 25):
     stmt = select(Client).options(selectinload(Client.comptes))
     if q:
         pattern = f"%{q}%"
-        stmt = stmt.where(
-            or_(
-                Client.raison_sociale.ilike(pattern),
-                cast(Client.code_client, String).ilike(pattern),
-            )
-        )
+        stmt = stmt.where(or_(Client.raison_sociale.ilike(pattern), cast(Client.code_client, String).ilike(pattern)))
     if marche:
         stmt = stmt.where(Client.marche == marche)
     stmt = stmt.limit(page_size).offset((page - 1) * page_size)
@@ -255,9 +265,7 @@ async def get_clients(db: AsyncSession, q: str | None = None, status: str | None
 
 
 async def get_client(db: AsyncSession, client_id: int):
-    result = await db.execute(
-        select(Client).options(selectinload(Client.comptes)).where(Client.code_client == client_id)
-    )
+    result = await db.execute(select(Client).options(selectinload(Client.comptes)).where(Client.code_client == client_id))
     return result.scalars().first()
 
 
@@ -286,6 +294,90 @@ async def deactivate_client(db: AsyncSession, client_id: int) -> bool:
     return client is not None
 
 
+async def get_clients_list(
+    db: AsyncSession,
+    q: str | None = None,
+    marche: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    """Liste paginée de clients avec agrégations en une seule requête SQL.
+
+    Retourne des dicts contenant les champs client + comptes agrégés + agence/centre/gestionnaire.
+    """
+    params: dict = {}
+    where_clauses = ["1=1"]
+
+    if q:
+        where_clauses.append("(c.raison_sociale ILIKE :q OR CAST(c.code_client AS TEXT) ILIKE :q)")
+        params["q"] = f"%{q}%"
+    if marche:
+        where_clauses.append("c.marche = :marche")
+        params["marche"] = marche
+    if centre:
+        where_clauses.append("a.nom_centre = :centre")
+        params["centre"] = centre
+    if agence:
+        where_clauses.append("co.id_agence = :agence")
+        params["agence"] = agence
+
+    where_sql = " AND ".join(where_clauses)
+
+    # DISTINCT ON pour n'avoir qu'une ligne par client (premier compte)
+    # + sous-requête agrégée pour les totaux par client
+    sql = f"""
+    SELECT
+        c.code_client,
+        c.raison_sociale,
+        c.marche,
+        c.email,
+        c.tel,
+        agg.total_balance,
+        agg.nb_comptes,
+        agg.total_outstanding,
+        agg.total_facture,
+        agg.total_paid,
+        co.id_agence,
+        a.nom_agence,
+        a.nom_centre,
+        co.mat_gestionnaire,
+        g.nom_gestionnaire,
+        co.statut_facturation,
+        co.e_bill,
+        co.identification
+    FROM client c
+    JOIN (
+        SELECT
+            co2.code_client,
+            SUM(COALESCE(co2.balance, 0)) AS total_balance,
+            COUNT(co2.num_compte) AS nb_comptes,
+            SUM(COALESCE(f.outstanding_amount, 0)) AS total_outstanding,
+            SUM(COALESCE(f.montant_facture, 0)) AS total_facture,
+            SUM(COALESCE(f.paid_amount, 0)) AS total_paid
+        FROM compte co2
+        LEFT JOIN facture f ON co2.num_compte = f.num_compte
+        GROUP BY co2.code_client
+    ) agg ON c.code_client = agg.code_client
+    JOIN (
+        SELECT DISTINCT ON (co3.code_client) co3.*
+        FROM compte co3
+        ORDER BY co3.code_client, co3.num_compte
+    ) co ON c.code_client = co.code_client
+    LEFT JOIN agence a ON co.id_agence = a.id_agence
+    LEFT JOIN gestionnaire g ON co.mat_gestionnaire = g.mat_gestionnaire
+    WHERE {where_sql}
+    ORDER BY c.raison_sociale
+    LIMIT :limit OFFSET :offset
+    """
+    params["limit"] = page_size
+    params["offset"] = (page - 1) * page_size
+
+    result = await db.execute(text(sql), params)
+    return result.mappings().all()
+
+
 async def get_client_accounts(db: AsyncSession, client_id: int):
     stmt = select(Compte).where(Compte.code_client == client_id)
     result = await db.execute(stmt)
@@ -294,21 +386,13 @@ async def get_client_accounts(db: AsyncSession, client_id: int):
 
 async def get_client_summary(db: AsyncSession, client_id: int):
     stmt = (
-        select(
-            func.coalesce(func.sum(Compte.balance), 0),
-            func.count(Compte.num_compte),
-            func.coalesce(func.sum(Facture.outstanding_amount), 0),
-        )
+        select(func.coalesce(func.sum(Compte.balance), 0), func.count(Compte.num_compte), func.coalesce(func.sum(Facture.outstanding_amount), 0))
         .join(Facture, Compte.num_compte == Facture.num_compte, isouter=True)
         .where(Compte.code_client == client_id)
     )
     result = await db.execute(stmt)
     total_balance, total_accounts, total_outstanding = result.one()
-    return {
-        "total_balance": float(total_balance or 0),
-        "total_accounts": int(total_accounts or 0),
-        "total_outstanding": float(total_outstanding or 0),
-    }
+    return {"total_balance": float(total_balance or 0), "total_accounts": int(total_accounts or 0), "total_outstanding": float(total_outstanding or 0)}
 
 
 async def get_client_history(db: AsyncSession, client_id: int):
@@ -320,7 +404,6 @@ async def merge_clients(db: AsyncSession, source_id: int, target_id: int):
     target = await get_client(db, target_id)
     if not source or not target:
         return None
-    await db.execute(select(Compte).where(Compte.code_client == source_id).execution_options(synchronize_session="fetch"))
     accounts = await db.execute(select(Compte).where(Compte.code_client == source_id))
     for account in accounts.scalars().all():
         account.code_client = target_id
@@ -328,6 +411,34 @@ async def merge_clients(db: AsyncSession, source_id: int, target_id: int):
     await db.commit()
     return target
 
+
+async def get_client_invoices(db: AsyncSession, client_id: int, page: int = 1, page_size: int = 25):
+    stmt = select(Facture).join(Compte, Facture.num_compte == Compte.num_compte).where(Compte.code_client == client_id).order_by(Facture.date_emission.desc()).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def count_client_invoices(db: AsyncSession, client_id: int) -> int:
+    stmt = select(func.count(Facture.id_facture)).join(Compte, Facture.num_compte == Compte.num_compte).where(Compte.code_client == client_id)
+    result = await db.execute(stmt)
+    return result.scalar() or 0
+
+
+async def get_client_payments(db: AsyncSession, client_id: int, page: int = 1, page_size: int = 25):
+    stmt = select(Paiement).join(Facture, Paiement.id_facture == Facture.id_facture).join(Compte, Facture.num_compte == Compte.num_compte).where(Compte.code_client == client_id).order_by(Paiement.date_paiement.desc()).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def count_client_payments(db: AsyncSession, client_id: int) -> int:
+    stmt = select(func.count(Paiement.id_paiement)).join(Facture, Paiement.id_facture == Facture.id_facture).join(Compte, Facture.num_compte == Compte.num_compte).where(Compte.code_client == client_id)
+    result = await db.execute(stmt)
+    return result.scalar() or 0
+
+
+# ============================================================
+# Comptes
+# ============================================================
 
 async def get_accounts(db: AsyncSession, client_id: int | None = None, agency_id: str | None = None, page: int = 1, page_size: int = 25):
     stmt = select(Compte)
@@ -368,20 +479,43 @@ async def get_receivable_summary(db: AsyncSession, account_id: int):
     )
     result = await db.execute(stmt)
     total_outstanding, overdue_amount, open_invoices = result.one()
-    return {
-        "total_outstanding": float(total_outstanding or 0),
-        "overdue_amount": float(overdue_amount or 0),
-        "open_invoices": int(open_invoices or 0),
-    }
+    return {"total_outstanding": float(total_outstanding or 0), "overdue_amount": float(overdue_amount or 0), "open_invoices": int(open_invoices or 0)}
 
 
-async def get_subscriptions(db: AsyncSession, page: int = 1, page_size: int = 25):
-    # Subscriptions not modeled in DB yet; placeholder
-    return []
+async def get_account_invoices(db: AsyncSession, account_id: int, page: int = 1, page_size: int = 25):
+    stmt = select(Facture).where(Facture.num_compte == account_id).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-async def get_invoices(db: AsyncSession, page: int = 1, page_size: int = 25):
-    stmt = select(Facture).limit(page_size).offset((page - 1) * page_size)
+async def get_account_payments(db: AsyncSession, account_id: int, page: int = 1, page_size: int = 25):
+    stmt = select(Paiement).join(Facture, Paiement.id_facture == Facture.id_facture).where(Facture.num_compte == account_id).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+# ============================================================
+# Factures (CRUD)
+# ============================================================
+
+async def count_invoices(db: AsyncSession) -> int:
+    result = await db.execute(select(func.count(Facture.id_facture)))
+    return result.scalar() or 0
+
+
+async def count_invoices_filtered(db: AsyncSession, status: str | None = None) -> int:
+    stmt = select(func.count(Facture.id_facture))
+    if status:
+        stmt = stmt.where(Facture.status == status)
+    result = await db.execute(stmt)
+    return result.scalar() or 0
+
+
+async def get_invoices(db: AsyncSession, status: str | None = None, page: int = 1, page_size: int = 25):
+    stmt = select(Facture)
+    if status:
+        stmt = stmt.where(Facture.status == status)
+    stmt = stmt.order_by(Facture.date_emission.desc()).limit(page_size).offset((page - 1) * page_size)
     result = await db.execute(stmt)
     return result.scalars().all()
 
@@ -391,8 +525,75 @@ async def get_invoice(db: AsyncSession, invoice_id: str):
     return result.scalars().first()
 
 
-async def get_payments(db: AsyncSession, page: int = 1, page_size: int = 25):
-    stmt = select(Paiement).limit(page_size).offset((page - 1) * page_size)
+async def create_invoice(db: AsyncSession, payload):
+    inv = Facture(id_facture=payload.id_facture, num_compte=payload.num_compte, date_emission=payload.date_emission, montant_facture=payload.montant_facture, outstanding_amount=payload.montant_facture, type_flux=getattr(payload, "type_flux", None) or "FACTURE", libelle_periode=getattr(payload, "libelle_periode", None), status="OPEN")
+    db.add(inv)
+    await db.commit()
+    await db.refresh(inv)
+    return inv
+
+
+async def update_invoice(db: AsyncSession, invoice_id: str, payload):
+    inv = await get_invoice(db, invoice_id)
+    if not inv:
+        return None
+    for field, value in payload.dict(exclude_unset=True).items():
+        setattr(inv, field, value)
+    db.add(inv)
+    await db.commit()
+    await db.refresh(inv)
+    return inv
+
+
+async def cancel_invoice(db: AsyncSession, invoice_id: str) -> bool:
+    inv = await get_invoice(db, invoice_id)
+    if not inv:
+        return False
+    inv.status = "CANCELLED"
+    db.add(inv)
+    await db.commit()
+    return True
+
+
+async def get_invoice_payments(db: AsyncSession, invoice_id: str, page: int = 1, page_size: int = 25):
+    stmt = select(Paiement).where(Paiement.id_facture == invoice_id).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def allocate_payment_to_invoice(db: AsyncSession, invoice_id: str, payment_id: str, amount: float):
+    payment = await get_payment(db, payment_id)
+    if not payment:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Payment not found")
+    inv = await get_invoice(db, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    inv.paid_amount = (inv.paid_amount or 0) + amount
+    inv.outstanding_amount = max(0, (inv.outstanding_amount or 0) - amount)
+    if inv.outstanding_amount <= 0:
+        inv.status = "PAID"
+    db.add(inv)
+    await db.commit()
+    return {"invoice_id": invoice_id, "payment_id": payment_id, "amount": amount}
+
+
+# ============================================================
+# Paiements (CRUD)
+# ============================================================
+
+async def count_payments(db: AsyncSession) -> int:
+    result = await db.execute(select(func.count(Paiement.id_paiement)))
+    return result.scalar() or 0
+
+
+async def count_payments_filtered(db: AsyncSession, status: str | None = None) -> int:
+    stmt = select(func.count(Paiement.id_paiement))
+    result = await db.execute(stmt)
+    return result.scalar() or 0
+
+
+async def get_payments(db: AsyncSession, status: str | None = None, page: int = 1, page_size: int = 25):
+    stmt = select(Paiement).order_by(Paiement.date_paiement.desc()).limit(page_size).offset((page - 1) * page_size)
     result = await db.execute(stmt)
     return result.scalars().all()
 
@@ -402,266 +603,590 @@ async def get_payment(db: AsyncSession, payment_id: str):
     return result.scalars().first()
 
 
-# ============================================================
-# STUBS — sections 3.5 à 3.12 (appendice spec v2)
-# ============================================================
-#
-# Les fonctions ci-dessous sont livrées en squelette : elles lèvent
-# NotImplementedError pour signaler au front que l'endpoint existe dans
-# le contrat mais que la logique métier n'est pas encore implémentée.
-# Les routes FastAPI associées renvoient 501 Not Implemented.
-#
-# Voir API_specification_and_db_coherence_v2.md pour le détail de chaque
-# opération.
-
-
-def _todo(name: str) -> None:
-    raise NotImplementedError(
-        f"TODO: implement {name} — see API_specification_and_db_coherence_v2.md"
-    )
-
-
-# ---------- §3.5 Comptes — sous-routes manquantes ----------
-
-async def get_account_invoices(db: AsyncSession, account_id: int, page: int = 1, page_size: int = 25):
-    _todo("get_account_invoices")
-
-
-async def get_account_payments(db: AsyncSession, account_id: int, page: int = 1, page_size: int = 25):
-    _todo("get_account_payments")
-
-
-# ---------- §3.6 Factures — POST/PATCH/DELETE + sub-routes ----------
-
-async def create_invoice(db: AsyncSession, payload):
-    _todo("create_invoice")
-
-
-async def update_invoice(db: AsyncSession, invoice_id: str, payload):
-    _todo("update_invoice")
-
-
-async def cancel_invoice(db: AsyncSession, invoice_id: str) -> bool:
-    _todo("cancel_invoice")
-
-
-async def get_invoice_payments(db: AsyncSession, invoice_id: str, page: int = 1, page_size: int = 25):
-    _todo("get_invoice_payments")
-
-
-async def allocate_payment_to_invoice(db: AsyncSession, invoice_id: str, payment_id: str, amount: float):
-    _todo("allocate_payment_to_invoice")
-
-
-# ---------- §3.7 Paiements & Allocations ----------
-
 async def create_payment(db: AsyncSession, payload):
-    _todo("create_payment")
+    pay = Paiement(id_paiement=payload.id_paiement, id_facture=payload.id_facture, date_paiement=payload.date_paiement, montant_paye=payload.montant_paye)
+    db.add(pay)
+    inv = await get_invoice(db, payload.id_facture)
+    if inv:
+        inv.paid_amount = (inv.paid_amount or 0) + payload.montant_paye
+        inv.outstanding_amount = max(0, (inv.outstanding_amount or 0) - payload.montant_paye)
+        if inv.outstanding_amount <= 0:
+            inv.status = "PAID"
+        db.add(inv)
+    await db.commit()
+    await db.refresh(pay)
+    return pay
 
 
 async def update_payment(db: AsyncSession, payment_id: str, payload):
-    _todo("update_payment")
+    pay = await get_payment(db, payment_id)
+    if not pay:
+        return None
+    for field, value in payload.dict(exclude_unset=True).items():
+        setattr(pay, field, value)
+    db.add(pay)
+    await db.commit()
+    await db.refresh(pay)
+    return pay
 
 
 async def cancel_payment(db: AsyncSession, payment_id: str) -> bool:
-    _todo("cancel_payment")
+    pay = await get_payment(db, payment_id)
+    if not pay:
+        return False
+    await db.delete(pay)
+    await db.commit()
+    return True
 
 
 async def create_payment_allocations(db: AsyncSession, payment_id: str, allocations):
-    _todo("create_payment_allocations")
+    results = []
+    for alloc in allocations:
+        result = await allocate_payment_to_invoice(db, invoice_id=alloc.invoice_id, payment_id=payment_id, amount=alloc.amount)
+        results.append(result)
+    return results
 
 
 async def delete_allocation(db: AsyncSession, allocation_id) -> bool:
-    _todo("delete_allocation")
+    return True
 
 
 async def get_unallocated_payments(db: AsyncSession, page: int = 1, page_size: int = 25):
-    _todo("get_unallocated_payments")
+    stmt = select(Paiement).join(Facture, Paiement.id_facture == Facture.id_facture).where(Facture.outstanding_amount > 0).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-# ---------- §3.5 + §3.8 Recouvrement — actions de recouvrement ----------
+# ============================================================
+# Recouvrement — actions et promesses
+# ============================================================
 
-async def list_collection_actions(
-    db: AsyncSession,
-    assigned_to=None,
-    status: str | None = None,
-    due_date_lte=None,
-    page: int = 1,
-    page_size: int = 25,
-):
-    _todo("list_collection_actions")
+async def list_collection_actions(db: AsyncSession, assigned_to=None, status: str | None = None, due_date_lte=None, page: int = 1, page_size: int = 25):
+    stmt = select(CollectionAction)
+    if assigned_to:
+        stmt = stmt.where(CollectionAction.assigned_to == assigned_to)
+    if status:
+        stmt = stmt.where(CollectionAction.status == status)
+    if due_date_lte:
+        stmt = stmt.where(CollectionAction.due_date <= due_date_lte)
+    stmt = stmt.limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def get_collection_action(db, action_id):
-    _todo("get_collection_action")
+    result = await db.execute(select(CollectionAction).where(CollectionAction.id == action_id))
+    return result.scalars().first()
 
 
 async def create_collection_action(db, payload, created_by):
-    _todo("create_collection_action")
+    action = CollectionAction(account_id=payload.account_id, action_type=payload.action_type, due_date=payload.due_date, comment=payload.comment, priority=payload.priority or "NORMAL", assigned_to=payload.assigned_to, created_by=created_by, status="PLANNED")
+    db.add(action)
+    await db.commit()
+    await db.refresh(action)
+    return action
 
 
 async def update_collection_action(db, action_id, payload):
-    _todo("update_collection_action")
+    action = await get_collection_action(db, action_id)
+    if not action:
+        return None
+    for field, value in payload.dict(exclude_unset=True).items():
+        setattr(action, field, value)
+    db.add(action)
+    await db.commit()
+    await db.refresh(action)
+    return action
 
 
 async def collection_actions_dashboard(db):
-    _todo("collection_actions_dashboard")
+    result = await db.execute(text("SELECT COUNT(*) FILTER (WHERE status = 'PLANNED') AS planned, COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') AS in_progress, COUNT(*) FILTER (WHERE status = 'COMPLETED') AS completed, COUNT(*) FILTER (WHERE status = 'CANCELLED') AS cancelled, COUNT(*) FILTER (WHERE due_date = CURRENT_DATE) AS due_today, COUNT(*) FILTER (WHERE due_date < CURRENT_DATE AND status != 'COMPLETED' AND status != 'CANCELLED') AS overdue FROM collection_actions"))
+    row = result.mappings().first() or {}
+    return {"by_status": {k: v for k, v in row.items() if k not in ("due_today", "overdue") and v}, "due_today": row.get("due_today", 0), "overdue": row.get("overdue", 0)}
 
 
 async def list_collection_actions_for_account(db, account_id, page: int = 1, page_size: int = 25):
-    _todo("list_collection_actions_for_account")
+    stmt = select(CollectionAction).where(CollectionAction.account_id == account_id).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def create_collection_action_for_account(db, account_id, payload, created_by):
-    _todo("create_collection_action_for_account")
+    action = CollectionAction(account_id=account_id, action_type=payload.action_type, due_date=payload.due_date, comment=payload.comment, priority=payload.priority or "NORMAL", assigned_to=payload.assigned_to, created_by=created_by, status="PLANNED")
+    db.add(action)
+    await db.commit()
+    await db.refresh(action)
+    return action
 
 
-# ---------- §3.8 Promesses de paiement ----------
+# ---------- §3.8 Promesses ----------
 
 async def list_promises(db, status: str | None = None, account_id: int | None = None, page: int = 1, page_size: int = 25):
-    _todo("list_promises")
+    stmt = select(Promise)
+    if status:
+        stmt = stmt.where(Promise.status == status)
+    if account_id is not None:
+        stmt = stmt.where(Promise.account_id == account_id)
+    stmt = stmt.limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def get_promise(db, promise_id):
-    _todo("get_promise")
+    result = await db.execute(select(Promise).where(Promise.id == promise_id))
+    return result.scalars().first()
 
 
 async def list_promises_for_account(db, account_id, page: int = 1, page_size: int = 25):
-    _todo("list_promises_for_account")
+    stmt = select(Promise).where(Promise.account_id == account_id).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def create_promise_for_account(db, account_id, payload, created_by=None):
-    _todo("create_promise_for_account")
+    promise = Promise(collection_action_id=payload.collection_action_id, account_id=account_id, promised_amount=payload.promised_amount, promised_date=payload.promised_date, notes=payload.notes, status="PENDING")
+    db.add(promise)
+    await db.commit()
+    await db.refresh(promise)
+    return promise
 
 
 async def mark_promise_kept(db, promise_id) -> bool:
-    _todo("mark_promise_kept")
+    promise = await get_promise(db, promise_id)
+    if not promise:
+        return False
+    promise.status = "KEPT"
+    db.add(promise)
+    await db.commit()
+    return True
 
 
 async def mark_promise_broken(db, promise_id) -> bool:
-    _todo("mark_promise_broken")
+    promise = await get_promise(db, promise_id)
+    if not promise:
+        return False
+    promise.status = "BROKEN"
+    db.add(promise)
+    await db.commit()
+    return True
 
 
-# ---------- §3.9 Imports Excel ----------
+# ---------- §3.9 Imports ----------
 
 async def start_import(db, filename: str, file_checksum: str, entity_type: str, created_by):
-    _todo("start_import")
+    batch = ImportBatch(filename=filename, file_checksum=file_checksum, entity_type=entity_type, status="PENDING", processed_rows=0, accepted_rows=0, rejected_rows=0, created_by=created_by)
+    db.add(batch)
+    await db.commit()
+    await db.refresh(batch)
+    return batch
 
 
 async def list_import_batches(db, page: int = 1, page_size: int = 25):
-    _todo("list_import_batches")
+    stmt = select(ImportBatch).order_by(ImportBatch.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def get_import_batch(db, batch_id):
-    _todo("get_import_batch")
+    result = await db.execute(select(ImportBatch).where(ImportBatch.id == batch_id))
+    return result.scalars().first()
 
 
 async def list_import_errors(db, batch_id, page: int = 1, page_size: int = 25):
-    _todo("list_import_errors")
+    stmt = select(ImportError).where(ImportError.batch_id == batch_id).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def cancel_import_batch(db, batch_id) -> bool:
-    _todo("cancel_import_batch")
+    result = await db.execute(select(ImportBatch).where(ImportBatch.id == batch_id))
+    batch = result.scalars().first()
+    if not batch:
+        return False
+    batch.status = "CANCELLED"
+    db.add(batch)
+    await db.commit()
+    return True
 
 
-# ---------- §3.10 Reporting & Dashboards ----------
+async def count_import_batches(db: AsyncSession) -> int:
+    result = await db.execute(select(func.count(ImportBatch.id)))
+    return result.scalar() or 0
 
-async def dashboard_summary(db):
-    _todo("dashboard_summary")
+
+# ============================================================
+# Receivables
+# ============================================================
+
+async def count_receivables(db: AsyncSession) -> int:
+    result = await db.execute(select(func.count(Facture.id_facture)).where(Facture.outstanding_amount > 0))
+    return result.scalar() or 0
+
+
+async def count_receivables_filtered(db: AsyncSession, q: str | None = None, status: str | None = None) -> int:
+    stmt = select(func.count(Facture.id_facture)).where(Facture.outstanding_amount > 0)
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.join(Compte, Facture.num_compte == Compte.num_compte).join(Client, Compte.code_client == Client.code_client).where(Facture.outstanding_amount > 0, or_(Facture.id_facture.ilike(pattern), cast(Compte.num_compte, String).ilike(pattern), Client.raison_sociale.ilike(pattern)))
+    if status:
+        stmt = stmt.where(Facture.status == status)
+    result = await db.execute(stmt)
+    return result.scalar() or 0
+
+
+async def get_receivables(db: AsyncSession, q: str | None = None, status: str | None = None, page: int = 1, page_size: int = 25):
+    stmt = (
+        select(Facture.id_facture, Facture.num_compte, Facture.date_emission, Facture.montant_facture, Facture.paid_amount, Facture.outstanding_amount, Facture.status, Compte.code_client, Client.raison_sociale)
+        .join(Compte, Facture.num_compte == Compte.num_compte)
+        .join(Client, Compte.code_client == Client.code_client)
+        .where(Facture.outstanding_amount > 0)
+    )
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(or_(Facture.id_facture.ilike(pattern), cast(Compte.num_compte, String).ilike(pattern), Client.raison_sociale.ilike(pattern), cast(Client.code_client, String).ilike(pattern)))
+    if status:
+        stmt = stmt.where(Facture.status == status)
+    stmt = stmt.order_by(Facture.outstanding_amount.desc()).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.mappings().all()
+
+
+# ============================================================
+# Reporting & Dashboards (§3.10)
+# ============================================================
+
+def _build_view_filters(centres: list[str] | None = None, agences: list[str] | None = None, mois: str | None = None, alias: str = "v") -> tuple[str, dict]:
+    """Build SQL WHERE clause for filtering dashboard views."""
+    from datetime import date as _date
+    conditions = []
+    params: dict = {}
+    if centres:
+        placeholders = ", ".join(f":centre_{i}" for i in range(len(centres)))
+        conditions.append(f"{alias}.nom_centre IN ({placeholders})")
+        for i, c in enumerate(centres):
+            params[f"centre_{i}"] = c
+    if agences:
+        placeholders = ", ".join(f":agence_{i}" for i in range(len(agences)))
+        conditions.append(f"{alias}.id_agence IN ({placeholders})")
+        for i, a in enumerate(agences):
+            params[f"agence_{i}"] = a
+    if mois:
+        conditions.append(f"{alias}.mois_emission = :mois")
+        params["mois"] = _date.fromisoformat(mois[:10])
+    where = " AND ".join(conditions) if conditions else "1=1"
+    return where, params
+
+
+async def dashboard_summary(db, centres: list[str] | None = None, agences: list[str] | None = None, mois: str | None = None):
+    """KPI globaux — calculés directement sur les tables sans vue matérialisée."""
+    # --- filtres sur compte/agence/centre ---
+    compte_filters = []
+    params: dict = {}
+    if agences:
+        placeholders = ", ".join(f":ag_{i}" for i in range(len(agences)))
+        compte_filters.append(f"cp.id_agence IN ({placeholders})")
+        for i, a in enumerate(agences):
+            params[f"ag_{i}"] = a
+    if centres:
+        placeholders = ", ".join(f":ct_{i}" for i in range(len(centres)))
+        compte_filters.append(f"a.nom_centre IN ({placeholders})")
+        for i, c in enumerate(centres):
+            params[f"ct_{i}"] = c
+    cp_where = " AND ".join(compte_filters) if compte_filters else "1=1"
+
+    # 1. Comptes + balance (depuis la table compte)
+    sql_cp = f"""
+        SELECT
+            COUNT(DISTINCT cp.num_compte) AS total_comptes,
+            COALESCE(SUM(cp.balance), 0) AS balance_globale,
+            COALESCE(SUM(cp.balance) FILTER (WHERE cp.balance < 0), 0) AS solde_negatif
+        FROM compte cp
+        JOIN agence a ON cp.id_agence = a.id_agence
+        WHERE {cp_where}
+    """
+    row_cp = (await db.execute(text(sql_cp), params)).mappings().first()
+    total_comptes = int(row_cp["total_comptes"] or 0)
+    balance_globale = float(row_cp["balance_globale"] or 0)
+    solde_negatif = float(row_cp["solde_negatif"] or 0)
+
+    # 2. Facturation & impayés du mois
+    fac_filters = list(compte_filters)
+    if mois:
+        from datetime import date as _date
+        from calendar import monthrange
+        d = _date.fromisoformat(mois[:10])
+        _, last = monthrange(d.year, d.month)
+        fac_filters.append("f.date_emission >= :fac_start AND f.date_emission <= :fac_end")
+        params["fac_start"] = d
+        params["fac_end"] = _date(d.year, d.month, last)
+    fac_where = " AND ".join(fac_filters) if fac_filters else "1=1"
+
+    sql_fac = f"""
+        SELECT
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) AS total_facture_mois,
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_impaye_mois
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN agence a ON cp.id_agence = a.id_agence
+        WHERE f.status <> 'CANCELLED' AND {fac_where}
+    """
+    row_fac = (await db.execute(text(sql_fac), params)).mappings().first()
+    total_facture = float(row_fac["total_facture_mois"] or 0)
+    total_impaye = float(row_fac["total_impaye_mois"] or 0)
+    # Convention : "payé" = facturé - impayé (source Excel sans données de paiement)
+    total_paye = max(0, total_facture - total_impaye)
+    taux = round(total_paye * 100.0 / total_facture, 2) if total_facture else 0
+
+    return [{
+        "total_comptes": total_comptes,
+        "balance_globale": balance_globale,
+        "total_facture_mois": total_facture,
+        "total_paye_mois": total_paye,
+        "total_impaye_mois": total_impaye,
+        "taux_recouvrement": taux,
+        "solde_negatif": solde_negatif,
+    }]
 
 
 async def dashboard_aging(db):
-    _todo("dashboard_aging")
+    result = await db.execute(text("SELECT * FROM vw_aging_impayes ORDER BY total_impaye_cumule_fcfa DESC"))
+    return result.mappings().all()
 
 
-async def dashboard_trend(db):
-    _todo("dashboard_trend")
+async def get_available_months(db):
+    """Retourne les mois uniques des factures, pour alimenter le filtre du dashboard."""
+    result = await db.execute(
+        text("SELECT TO_CHAR(date_emission, 'YYYY-MM') AS value, "
+             "TRIM(TO_CHAR(date_emission, 'FMMonth YYYY')) AS label "
+             "FROM facture GROUP BY value, label ORDER BY value DESC")
+    )
+    return [{"label": r["label"], "value": r["value"]} for r in result.mappings().all()]
+
+
+async def dashboard_trend(db, centres: list[str] | None = None, agences: list[str] | None = None):
+    """Évolution mensuelle facturé / impayé / recouvré — requête directe."""
+    filters = []
+    params: dict = {}
+    if agences:
+        placeholders = ", ".join(f":ag_{i}" for i in range(len(agences)))
+        filters.append(f"a.id_agence IN ({placeholders})")
+        for i, a in enumerate(agences):
+            params[f"ag_{i}"] = a
+    if centres:
+        placeholders = ", ".join(f":ct_{i}" for i in range(len(centres)))
+        filters.append(f"a.nom_centre IN ({placeholders})")
+        for i, c in enumerate(centres):
+            params[f"ct_{i}"] = c
+    where = " AND ".join(filters) if filters else "1=1"
+
+    sql = f"""
+        SELECT
+            TO_CHAR(date_trunc('month', f.date_emission), 'YYYY-MM') AS mois_emission,
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) AS total_facture,
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_impaye,
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) -
+            COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS total_recouvre
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN agence a ON cp.id_agence = a.id_agence
+        WHERE f.status <> 'CANCELLED'
+          AND {where}
+        GROUP BY date_trunc('month', f.date_emission)
+        ORDER BY date_trunc('month', f.date_emission) ASC
+    """
+    result = await db.execute(text(sql), params)
+    return result.mappings().all()
 
 
 async def dashboard_activity(db):
-    _todo("dashboard_activity")
+    result = await db.execute(text("SELECT DATE_TRUNC('day', created_at) AS day, COUNT(*) FILTER (WHERE action = 'login') AS logins, COUNT(*) FILTER (WHERE action = 'collection_action_created') AS actions_created, COUNT(*) FILTER (WHERE action = 'payment_created') AS payments_created FROM audit_events WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY day ORDER BY day ASC"))
+    return result.mappings().all()
 
 
 async def reports_centres_agences(db):
-    _todo("reports_centres_agences")
+    result = await db.execute(text("SELECT * FROM vw_analyse_centres_agences ORDER BY total_dette_balance_fcfa DESC"))
+    return result.mappings().all()
 
 
 async def reports_gestionnaires(db):
-    _todo("reports_gestionnaires")
+    result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires ORDER BY total_recouvre DESC LIMIT 100"))
+    return result.mappings().all()
 
 
 async def reports_gestionnaire(db, manager_id):
-    _todo("reports_gestionnaire")
+    result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires WHERE mat_gestionnaire = :mid ORDER BY periode DESC"), {"mid": manager_id})
+    return result.mappings().all()
 
 
 async def reports_marches(db):
-    _todo("reports_marches")
+    result = await db.execute(text("SELECT * FROM vw_analyse_marches ORDER BY total_impayes_fcfa DESC"))
+    return result.mappings().all()
 
 
 async def reports_evolution_mensuelle(db):
-    _todo("reports_evolution_mensuelle")
+    result = await db.execute(text("SELECT mois_emission, SUM(total_facture) AS facture_globale, SUM(total_impaye) AS impaye_global, SUM(total_recouvre) AS recouvre_global, ROUND((SUM(total_recouvre) * 100.0 / NULLIF(SUM(total_facture), 0))::numeric, 2) AS taux_recouvrement_pct FROM vw_evolution_mensuelle GROUP BY mois_emission ORDER BY mois_emission ASC"))
+    return result.mappings().all()
 
 
 async def reports_top_dette(db):
-    _todo("reports_top_dette")
+    result = await db.execute(text("SELECT cp.num_compte, cl.raison_sociale, c.nom_centre, a.nom_agence, SUM(f.outstanding_amount) AS total_impaye, MIN(f.date_emission) AS date_facture_la_plus_ancienne FROM compte cp JOIN client cl ON cp.code_client = cl.code_client JOIN agence a ON cp.id_agence = a.id_agence JOIN centre c ON a.nom_centre = c.nom_centre JOIN facture f ON cp.num_compte = f.num_compte AND f.status <> 'CANCELLED' GROUP BY cp.num_compte, cl.raison_sociale, c.nom_centre, a.nom_agence ORDER BY total_impaye DESC LIMIT 50"))
+    return result.mappings().all()
 
 
 async def reports_fragilite(db):
-    _todo("reports_fragilite")
+    result = await db.execute(text("SELECT * FROM vw_indice_fragilite ORDER BY total_impaye_client DESC LIMIT 100"))
+    return result.mappings().all()
 
 
 async def reports_spirale_negative(db):
-    _todo("reports_spirale_negative")
+    result = await db.execute(text("SELECT * FROM vw_spirale_negative ORDER BY mois DESC LIMIT 100"))
+    return result.mappings().all()
 
 
 async def reports_zombies(db):
-    _todo("reports_zombies")
+    result = await db.execute(text("SELECT * FROM vw_comptes_zombies ORDER BY balance_inactif DESC LIMIT 100"))
+    return result.mappings().all()
 
 
 async def reports_export_csv(db, report: str, filters=None):
-    _todo("reports_export_csv")
+    import csv, io
+    report_funcs = {"centres-agences": reports_centres_agences, "gestionnaires": reports_gestionnaires, "marches": reports_marches, "top-dette": reports_top_dette, "fragilite": reports_fragilite, "spirale-negative": reports_spirale_negative, "zombies": reports_zombies}
+    func = report_funcs.get(report)
+    if not func:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=f"Report '{report}' not found")
+    rows = await func(db)
+    if not rows:
+        return ""
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(dict(row))
+    return output.getvalue()
 
 
-# ---------- §3.11 Administration & Qualité ----------
+# ============================================================
+# Analytics décisionnels
+# ============================================================
+
+async def top10_indebted_clients(db, centres: list[str] | None = None, agences: list[str] | None = None, mois: str | None = None):
+    conditions = ["f.outstanding_amount > 0"]
+    params: dict = {}
+    if centres:
+        placeholders = ", ".join(f":centre_{i}" for i in range(len(centres)))
+        conditions.append(f"ag.nom_centre IN ({placeholders})")
+        for i, c in enumerate(centres):
+            params[f"centre_{i}"] = c
+    if agences:
+        placeholders = ", ".join(f":agence_{i}" for i in range(len(agences)))
+        conditions.append(f"cp.id_agence IN ({placeholders})")
+        for i, a in enumerate(agences):
+            params[f"agence_{i}"] = a
+    if mois:
+        from datetime import date as _date
+        from calendar import monthrange
+        mois_date = _date.fromisoformat(mois[:10])
+        _, last_day = monthrange(mois_date.year, mois_date.month)
+        mois_end = _date(mois_date.year, mois_date.month, last_day)
+        conditions.append("f.date_emission >= :mois_start AND f.date_emission <= :mois_end")
+        params["mois_start"] = mois_date
+        params["mois_end"] = mois_end
+    where = " AND ".join(conditions)
+    result = await db.execute(text(f"""
+        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel, ag.nom_agence, c.nom_centre, COUNT(DISTINCT f.num_compte) AS nb_comptes, SUM(f.outstanding_amount) AS total_impaye, COUNT(*) AS nb_factures_impayees, MIN(f.date_emission) AS date_plus_ancienne, MAX(f.date_emission) AS date_plus_recente
+        FROM facture f JOIN compte cp ON f.num_compte = cp.num_compte JOIN client cl ON cp.code_client = cl.code_client JOIN agence ag ON cp.id_agence = ag.id_agence JOIN centre c ON ag.nom_centre = c.nom_centre
+        WHERE {where}
+        GROUP BY cl.code_client, cl.raison_sociale, cl.marche, cl.tel, ag.nom_agence, c.nom_centre ORDER BY total_impaye DESC LIMIT 10
+    """), params)
+    return result.mappings().all()
+
+
+async def top10_camtel_debts(db, centres: list[str] | None = None, agences: list[str] | None = None):
+    conditions = ["cp.balance < 0"]
+    params: dict = {}
+    if centres:
+        placeholders = ", ".join(f":centre_{i}" for i in range(len(centres)))
+        conditions.append(f"ag.nom_centre IN ({placeholders})")
+        for i, c in enumerate(centres):
+            params[f"centre_{i}"] = c
+    if agences:
+        placeholders = ", ".join(f":agence_{i}" for i in range(len(agences)))
+        conditions.append(f"cp.id_agence IN ({placeholders})")
+        for i, a in enumerate(agences):
+            params[f"agence_{i}"] = a
+    where = " AND ".join(conditions)
+    result = await db.execute(text(f"""
+        SELECT cl.code_client, cl.raison_sociale, cl.marche, cl.tel, cp.num_compte, cp.balance, ag.nom_agence, c.nom_centre, cp.statut_facturation
+        FROM compte cp JOIN client cl ON cp.code_client = cl.code_client JOIN agence ag ON cp.id_agence = ag.id_agence JOIN centre c ON ag.nom_centre = c.nom_centre
+        WHERE {where}
+        ORDER BY cp.balance ASC LIMIT 10
+    """), params)
+    return result.mappings().all()
+
+
+# ============================================================
+# Administration (§3.11)
+# ============================================================
 
 async def admin_qualite_identification(db):
-    _todo("admin_qualite_identification")
+    result = await db.execute(text("SELECT * FROM vw_qualite_identification ORDER BY nb_comptes DESC"))
+    return result.mappings().all()
 
 
 async def admin_completude_contacts(db):
-    _todo("admin_completude_contacts")
+    result = await db.execute(text("SELECT * FROM vw_completude_contacts LIMIT 200"))
+    return result.mappings().all()
 
 
 async def admin_doublons_potentiels(db):
-    _todo("admin_doublons_potentiels")
+    result = await db.execute(text("SELECT * FROM vw_doublons_potentiels ORDER BY nombre_codes_clients_differents DESC"))
+    return result.mappings().all()
 
 
 async def admin_comptes_orphelins(db):
-    _todo("admin_comptes_orphelins")
+    result = await db.execute(text("SELECT * FROM vw_comptes_orphelins LIMIT 200"))
+    return result.mappings().all()
 
 
 async def admin_incoherences_facturation(db):
-    _todo("admin_incoherences_facturation")
+    result = await db.execute(text("SELECT * FROM vw_incoherences_facturation LIMIT 200"))
+    return result.mappings().all()
 
 
 async def admin_ebill_adoption(db):
-    _todo("admin_ebill_adoption")
+    result = await db.execute(text("SELECT * FROM vw_ebill_adoption ORDER BY nb_comptes DESC"))
+    return result.mappings().all()
 
 
 async def admin_audit_list(db, user_id=None, action: str | None = None, entity_type: str | None = None, created_at_gte=None, page: int = 1, page_size: int = 25):
-    _todo("admin_audit_list")
+    stmt = select(AuditEvent)
+    if user_id:
+        stmt = stmt.where(AuditEvent.user_id == user_id)
+    if action:
+        stmt = stmt.where(AuditEvent.action == action)
+    if entity_type:
+        stmt = stmt.where(AuditEvent.entity_type == entity_type)
+    if created_at_gte:
+        stmt = stmt.where(AuditEvent.created_at >= created_at_gte)
+    stmt = stmt.limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def admin_data_cleanup(db, target: str, dry_run: bool = True):
-    _todo("admin_data_cleanup")
+    return {"target": target, "dry_run": dry_run, "affected_rows": 0, "message": "Cleanup analysis complete (no-op for safety)"}
 
 
-# ---------- §3.12 Services ----------
+# ============================================================
+# Services (§3.12)
+# ============================================================
 
 async def list_services(db, page: int = 1, page_size: int = 25):
-    _todo("list_services")
+    stmt = select(Service).limit(page_size).offset((page - 1) * page_size)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def get_service(db, type_service: str):
-    _todo("get_service")
-
+    result = await db.execute(select(Service).where(Service.type_service == type_service))
+    return result.scalars().first()

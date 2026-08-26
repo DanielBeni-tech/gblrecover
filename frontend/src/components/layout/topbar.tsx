@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Bell, ChevronRight, LogOut, Menu, Search, Settings } from "lucide-react";
-import { customers } from "@/data/mock-data";
+import { getClient } from "@/api/client";
 import { Avatar } from "@/components/ui/avatar";
 
 const labels: Record<string, string> = {
@@ -19,22 +20,31 @@ export function Topbar({ onMenuOpen }: { onMenuOpen: () => void }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [session, setSession] = useState(() => JSON.parse(localStorage.getItem("gbl-session") ?? "null") as { user: { name: string; role: string; initials: string } } | null);
+  const [session, setSession] = useState(() => JSON.parse(localStorage.getItem("gbl-session") ?? "null") as { user: { full_name: string; email: string; role: string; initials: string } } | null);
+
+  const segs = location.pathname.split("/").filter(Boolean);
+  const clientId = segs[0] === "clients" && segs[1] ? segs[1] : null;
+
+  // Résolution du nom du client courant via l'API (cache par id).
+  const { data: client } = useQuery({
+    queryKey: ["client-breadcrumb", clientId],
+    queryFn: () => getClient(clientId!),
+    enabled: Boolean(clientId),
+    staleTime: 60_000,
+  });
 
   const crumbs = useMemo(() => {
-    const segs = location.pathname.split("/").filter(Boolean);
     const out: Array<{ label: string; to?: string }> = [];
     if (segs[0] === "clients") {
       out.push({ label: "Clients", to: "/clients" });
       if (segs[1]) {
-        const c = customers.find((x) => x.id === segs[1]);
-        out.push({ label: c ? c.name : segs[1] });
+        out.push({ label: client?.raison_sociale ?? segs[1] });
       }
     } else if (segs[0]) {
       out.push({ label: labels[segs[0]] ?? segs[0] });
     }
     return out;
-  }, [location.pathname]);
+  }, [location.pathname, client]);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,19 +103,23 @@ export function Topbar({ onMenuOpen }: { onMenuOpen: () => void }) {
         </button>
         <span className="mx-1 hidden h-6 w-px bg-outline-variant sm:block" />
         <div className="hidden items-center gap-2.5 sm:flex">
-          <Avatar name={session?.user.name ?? "Utilisateur"} className="h-8 w-8 border border-primary-fixed-dim" />
+          <Avatar name={session?.user.full_name ?? "Utilisateur"} className="h-8 w-8 border border-primary-fixed-dim" />
           <div className="hidden leading-tight md:block">
-            <p className="text-[13px] font-semibold text-on-surface">{session?.user.name}</p>
-            <p className="text-[11px] text-on-surface-variant">{session?.user.role}</p>
+            <p className="text-[13px] font-semibold text-on-surface">{session?.user.full_name ?? "Utilisateur"}</p>
+            <p className="text-[11px] text-on-surface-variant">{session?.user.email ?? ""}</p>
           </div>
         </div>
         <button
           aria-label="Se déconnecter"
           className="rounded p-2 text-on-surface-variant hover:bg-surface-container-high hover:text-error"
-          onClick={() => {
-            localStorage.removeItem("gbl-session");
-            setSession(null);
-            navigate("/login");
+          onClick={async () => {
+            try {
+              localStorage.removeItem("gbl-session");
+              setSession(null);
+              navigate("/login");
+            } catch {
+              navigate("/login");
+            }
           }}
         >
           <LogOut className="h-[18px] w-[18px]" />

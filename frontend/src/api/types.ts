@@ -138,6 +138,79 @@ export interface CollectionActionDashboard {
   overdue: number;
 }
 
+export interface Promise {
+  id: string;
+  collection_action_id: string;
+  account_id: number;
+  promised_amount: number;
+  promised_date: string;
+  notes: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Alias exporté pour éviter la collision avec le `Promise` global. */
+export type PaymentPromise = Promise;
+
+// ============================================================
+// Imports Excel (§3.9)
+// ============================================================
+
+export interface ImportBatch {
+  id: string;
+  filename: string;
+  file_checksum: string;
+  entity_type: string;
+  status: string;
+  total_rows: number | null;
+  processed_rows: number;
+  accepted_rows: number;
+  rejected_rows: number;
+  started_at: string | null;
+  completed_at: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportError {
+  id: string;
+  batch_id: string;
+  row_number: number;
+  column_name: string | null;
+  raw_value: string | null;
+  error_message: string;
+  created_at: string;
+}
+
+// ============================================================
+// Services (§3.12)
+// ============================================================
+
+export interface Service {
+  type_service: string;
+  libelle_service: string | null;
+}
+
+// ============================================================
+// Audit (§3.11)
+// ============================================================
+
+export interface AuditEvent {
+  id: string;
+  user_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  request_id: string | null;
+  created_at: string;
+}
+
 // ============================================================
 // Dashboards (lignes de rapports / vues SQL — colonnes permissives)
 // ============================================================
@@ -198,7 +271,7 @@ export class ApiError extends Error {
 }
 
 // ============================================================
-// Modèle UI (utilisé par les composants et mock-data)
+// Modèle UI (utilisé par les pages et les adaptateurs du client API)
 // ============================================================
 
 export type CustomerType = "entreprise" | "particulier" | "etat";
@@ -247,6 +320,9 @@ export interface UiCustomerDetail extends UiCustomer {
   receivables: UiReceivable[];
   actions: UiCollectionAction[];
   manager: UiManager | null;
+  marche?: string;
+  eBill?: string;
+  identification?: string;
 }
 
 export interface UiAccount {
@@ -333,8 +409,11 @@ export interface UiDashboardData {
   kpis: {
     encoursTotal: number;
     echues: number;
+    payees: number;
     tauxRecouvrement: number;
     actionsEnRetard: number;
+    totalComptes: number;
+    soldeNegatif: number;
   };
   aging: AgingDatum[];
   trend: Array<{ month: string; dette: number; encaissement: number }>;

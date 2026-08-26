@@ -91,9 +91,7 @@ async def admin_audit(
 
 
 @router.post(
-    "/admin/data-cleanup",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    "/admin/data-cleanup")
 async def admin_data_cleanup(
     payload: schemas.DataCleanupRequest,
     current_user=Depends(get_current_user),

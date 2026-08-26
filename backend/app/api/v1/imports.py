@@ -15,9 +15,7 @@ router = APIRouter()
 
 @router.post(
     "/imports",
-    response_model=schemas.ImportStartResponse,
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    response_model=schemas.ImportStartResponse)
 async def start_import(
     file: UploadFile = File(...),
     entity_type: str = Form(...),
@@ -77,9 +75,7 @@ async def list_import_errors(
 
 
 @router.delete(
-    "/imports/{batch_id}",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
+    "/imports/{batch_id}")
 async def cancel_import(
     batch_id: UUID,
     current_user=Depends(get_current_user),
@@ -88,3 +84,11 @@ async def cancel_import(
     ok = await crud.cancel_import_batch(db, batch_id)
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
+
+
+@router.get("/imports/count")
+async def count_imports(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return {"total": await crud.count_import_batches(db)}

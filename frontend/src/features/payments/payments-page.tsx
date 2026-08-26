@@ -1,24 +1,42 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getPayments } from "@/api/client";
+import { listPayments } from "@/api/client";
+import type { Payment } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
-import { Badge, paymentStatusLabel, paymentStatusTone } from "@/components/ui/badge";
+import { Badge, paymentStatusTone, paymentStatusLabel } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { xaf, dateFr } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
+
+interface PaymentRow {
+  id: string;
+  reference: string;
+  invoiceId: string;
+  date: string;
+  amount: number;
+  status: string;
+}
+
+function toRow(p: Payment): PaymentRow {
+  return {
+    id: p.id_paiement,
+    reference: p.id_paiement,
+    invoiceId: p.id_facture,
+    date: p.date_paiement ?? "",
+    amount: p.montant_paye ?? 0,
+    status: "valide",
+  };
+}
 
 export function PaymentsPage() {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -29,12 +47,17 @@ export function PaymentsPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const filters = useMemo(() => ({ query: debounced, status, page, pageSize: PAGE_SIZE }), [debounced, status, page]);
+  const filters = useMemo(() => ({ page, pageSize: PAGE_SIZE }), [page]);
 
-  const { data, isLoading } = useQuery({ queryKey: ["payments", filters], queryFn: () => getPayments(filters) });
+  const { data, isLoading } = useQuery({ queryKey: ["payments", filters], queryFn: () => listPayments(filters) });
 
-  // Garde-fous : valeurs par défaut si le backend ne fournit pas les compteurs.
-  const counts = data?.counts ?? { impute: 0, partiel: 0, recu: 0, anomalie: 0 };
+  const items = (data ?? [])
+    .map(toRow)
+    .filter((row) => {
+      if (!debounced) return true;
+      const q = debounced.toLowerCase();
+      return row.reference.toLowerCase().includes(q) || row.invoiceId.toLowerCase().includes(q);
+    });
 
   return (
     <>
@@ -42,47 +65,15 @@ export function PaymentsPage() {
       <Card className="p-4">
         <div className="md:w-1/2">
           <Label htmlFor="p-q">Recherche</Label>
-          <Input id="p-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Référence de paiement, ID client…" />
+          <Input id="p-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Référence de paiement, ID facture…" />
         </div>
       </Card>
 
       <Card className="overflow-hidden">
         <div className="border-b border-outline-variant bg-surface px-4 py-2.5">
           <p className="text-[16px] font-semibold text-on-surface">
-            {(data?.total ?? 0).toLocaleString("fr-FR")} <span className="text-[14px] font-normal text-on-surface-variant">paiements</span>
+            {items.length.toLocaleString("fr-FR")} <span className="text-[14px] font-normal text-on-surface-variant">paiements affichés</span>
           </p>
-        </div>
-
-        {/* Navigation rapide par section — accès direct à une catégorie de statut sans scroller */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-outline-variant bg-surface px-4 py-2.5">
-          <span className="t-label mr-1 text-on-surface-variant">Sections</span>
-          {[
-            { key: "", label: "Toutes", count: data?.total ?? 0, rest: "bg-surface-container text-on-surface" },
-            { key: "impute", label: "Imputés", count: counts.impute, rest: "bg-success-container text-success" },
-            { key: "partiel", label: "Partiels", count: counts.partiel, rest: "bg-secondary-fixed text-on-secondary-fixed" },
-            { key: "recu", label: "Reçus", count: counts.recu, rest: "bg-warning-container text-warning" },
-            { key: "anomalie", label: "Anomalies", count: counts.anomalie, rest: "bg-error-container text-on-error-container" },
-          ].map((chip) => {
-            const active = status === chip.key;
-            return (
-              <button
-                key={chip.key || "toutes"}
-                type="button"
-                onClick={() => {
-                  setStatus(chip.key);
-                  setPage(1);
-                }}
-                aria-pressed={active}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors",
-                  active ? "border-primary bg-primary text-on-primary" : cn(chip.rest, "border-outline-variant hover:border-primary"),
-                )}
-              >
-                {chip.label}
-                <span className="t-tabular text-[11px] opacity-80">{(chip.count ?? 0).toLocaleString("fr-FR")}</span>
-              </button>
-            );
-          })}
         </div>
         {isLoading ? (
           <div className="space-y-2 p-4">
@@ -90,41 +81,32 @@ export function PaymentsPage() {
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
-      ) : data && data.items.length === 0 ? (
-        <EmptyState
-          title="Aucun paiement enregistré"
-          description="Vérifiez votre recherche ou attendez les prochains encaissements pour voir les paiements ici."
-          action={
-            <Button variant="outline" size="sm" onClick={() => {}}>
-              Voir les créances
-            </Button>
-          }
-        />
+        ) : items.length === 0 ? (
+          <EmptyState
+            title="Aucune donnée de paiement"
+            description="La source de données Excel ne contient pas d'information de paiement. Les paiements seront disponibles une fois intégrés depuis le système financier."
+          />
         ) : (
-          <div className="max-h-[560px] overflow-auto">
-            <Table className="min-w-[860px]">
+          <div className="overflow-x-auto">
+            <Table className="min-w-[820px]">
               <TableHeader>
                 <tr>
                   <TableHead>Référence</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Compte</TableHead>
+                  <TableHead>Facture</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Montant</TableHead>
-                  <TableHead className="text-right">Imputé</TableHead>
                   <TableHead>Statut</TableHead>
                 </tr>
               </TableHeader>
               <TableBody>
-                {data?.items.map((p) => (
+                {items.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="t-tabular text-success">{p.reference}</TableCell>
-                    <TableCell className="max-w-[200px] truncate font-medium">{p.customerId}</TableCell>
-                    <TableCell className="t-tabular text-on-surface-variant">{p.accountNumber}</TableCell>
+                    <TableCell className="t-tabular text-data">{p.reference}</TableCell>
+                    <TableCell className="t-tabular text-on-surface-variant">{p.invoiceId}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(p.date)}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(p.amount)}</TableCell>
-                    <TableCell className="t-tabular text-right text-success">{xaf(p.allocated)}</TableCell>
                     <TableCell>
-                      <Badge tone={paymentStatusTone[p.status]}>{paymentStatusLabel[p.status]}</Badge>
+                      <Badge tone={paymentStatusTone[p.status] ?? "neutral"}>{paymentStatusLabel[p.status] ?? p.status}</Badge>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -132,7 +114,7 @@ export function PaymentsPage() {
             </Table>
           </div>
         )}
-        {data && data.total > 0 && <Pagination page={page} pageSize={PAGE_SIZE} total={data.total} onChange={setPage} />}
+        {data && data.length > 0 && <Pagination page={page} pageSize={PAGE_SIZE} total={data.length} onChange={setPage} />}
       </Card>
     </>
   );
