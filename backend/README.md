@@ -329,6 +329,18 @@ Par ordre de priorité pour l'intégration frontend :
 
 ## 10. Notes opérationnelles
 
+### Identifiants et accès
+
+| Ressource | Valeur |
+|---|---|
+| Compte de connexion frontend (démo) | `agent@camtel.cm` / `demo1234` |
+| `DATABASE_URL` (défaut, config.py) | `postgresql://postgres:postgres@localhost:5433/gblrecover` |
+| Docker (TRD §14) | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` = `gblrecover` |
+
+> **Authentification réelle (API)** : `POST /api/v1/auth/login` attend un utilisateur présent en base (`users.email` + mot de passe vérifié par `passlib`). Aucun utilisateur de démonstration n'est seedé par le schéma (seul `system@local`, mot de passe vide, est créé par `database/load_data.py`). Le compte frontend `agent@camtel.cm` / `demo1234` est géré uniquement côté client en mode démo (`VITE_DEMO_MODE=true`).
+>
+> **Incohérence connue** : `frontend/src/data/demo-data.ts` expose `demoPassword = "camtel2026"`, non correspondant au mot de passe de connexion effectif (`demo1234`).
+
 ### Différences connues vs spec
 
 | Point | Spec | Code | Raison |
