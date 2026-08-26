@@ -251,7 +251,7 @@ export function CustomerDetailPage() {
 
       {tab === "comptes" && (
         <Card>
-          <div className="overflow-x-auto">
+          <div className="max-h-[520px] overflow-auto">
             <Table>
               <TableHeader>
                 <tr>
@@ -266,7 +266,7 @@ export function CustomerDetailPage() {
               <TableBody>
                 {customer.accounts.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="t-tabular text-primary-container">{a.number}</TableCell>
+                    <TableCell className="t-tabular text-success">{a.number}</TableCell>
                     <TableCell className="text-on-surface-variant">{a.agency}</TableCell>
                     <TableCell className="text-on-surface-variant">{a.center}</TableCell>
                     <TableCell className="text-on-surface-variant">{customer.manager?.name ?? "—"}</TableCell>
@@ -286,7 +286,7 @@ export function CustomerDetailPage() {
 
       {tab === "factures" && (
         <Card>
-          <div className="overflow-x-auto">
+          <div className="max-h-[520px] overflow-auto">
             <Table>
               <TableHeader>
                 <tr>
@@ -303,7 +303,7 @@ export function CustomerDetailPage() {
               <TableBody>
                 {customer.invoices.map((f) => (
                   <TableRow key={f.id}>
-                    <TableCell className="t-tabular text-primary-container">{f.number}</TableCell>
+                    <TableCell className="t-tabular text-success">{f.number}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{f.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(f.issueDate)}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(f.dueDate)}</TableCell>
@@ -325,7 +325,7 @@ export function CustomerDetailPage() {
 
       {tab === "paiements" && (
         <Card>
-          <div className="overflow-x-auto">
+          <div className="max-h-[520px] overflow-auto">
             <Table>
               <TableHeader>
                 <tr>
@@ -340,7 +340,7 @@ export function CustomerDetailPage() {
               <TableBody>
                 {customer.payments.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="t-tabular text-primary-container">{p.reference}</TableCell>
+                    <TableCell className="t-tabular text-success">{p.reference}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{p.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{dateFr(p.date)}</TableCell>
                     <TableCell className="t-tabular text-right">{xaf(p.amount)}</TableCell>
@@ -358,7 +358,7 @@ export function CustomerDetailPage() {
 
       {tab === "creances" && (
         <Card>
-          <div className="overflow-x-auto">
+          <div className="max-h-[520px] overflow-auto">
             <Table>
               <TableHeader>
                 <tr>
@@ -374,7 +374,7 @@ export function CustomerDetailPage() {
               <TableBody>
                 {customer.receivables.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="t-tabular text-primary-container">{r.invoiceNumber}</TableCell>
+                    <TableCell className="t-tabular text-success">{r.invoiceNumber}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{r.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-right text-on-surface-variant">{xaf(r.initial)}</TableCell>
                     <TableCell className={`t-tabular text-right font-semibold ${r.balance > 0 ? "text-error" : "text-on-surface"}`}>

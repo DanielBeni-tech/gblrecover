@@ -225,7 +225,7 @@ export function DashboardPage() {
             <TableBody>
               {priorities.map((p: UiPriorityItem) => (
                 <TableRow key={p.id}>
-                  <TableCell className="t-tabular text-primary-container">
+                  <TableCell className="t-tabular text-success">
                     <Link to={`/clients/${p.id}`} className="hover:underline">
                       {p.id}
                     </Link>

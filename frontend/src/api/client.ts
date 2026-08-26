@@ -363,7 +363,11 @@ export async function getInvoices(filters: {
 // Paiements
 // ============================================================
 
-export async function getPayments(filters: { query?: string; page: number; pageSize: number }): Promise<{ total: number; items: UiPayment[] }> {
+export async function getPayments(filters: { query?: string; status?: string; page: number; pageSize: number }): Promise<{
+  total: number;
+  items: UiPayment[];
+  counts: { impute: number; partiel: number; recu: number; anomalie: number };
+}> {
   return withDemoFallback("/payments", async () => {
     await new Promise((r) => setTimeout(r, 300));
     let items: UiPayment[] = [];
@@ -376,10 +380,21 @@ export async function getPayments(filters: { query?: string; page: number; pageS
       const q = filters.query.toLowerCase();
       items = items.filter((pay) => pay.reference.toLowerCase().includes(q) || pay.customerId.toLowerCase().includes(q));
     }
+    // Compteurs par statut sur l'ensemble filtré (tous statuts confondus).
+    const counts = { impute: 0, partiel: 0, recu: 0, anomalie: 0 };
+    for (const pay of items) {
+      if (pay.status === "impute") counts.impute += 1;
+      else if (pay.status === "partiel") counts.partiel += 1;
+      else if (pay.status === "recu") counts.recu += 1;
+      else counts.anomalie += 1;
+    }
+    if (filters.status) {
+      items = items.filter((pay) => pay.status === filters.status);
+    }
     const total = items.length;
     const start = (filters.page - 1) * filters.pageSize;
     items = items.slice(start, start + filters.pageSize);
-    return { total, items };
+    return { total, items, counts };
   });
 }
 

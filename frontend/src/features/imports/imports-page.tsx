@@ -235,7 +235,7 @@ export function ImportsPage() {
                     {result.rejects.map((r, i) => (
                       <TableRow key={i}>
                         <TableCell className="t-tabular text-on-surface-variant">{r.row}</TableCell>
-                        <TableCell className="t-tabular text-primary-container">{r.column}</TableCell>
+                        <TableCell className="t-tabular text-success">{r.column}</TableCell>
                         <TableCell className="t-tabular text-on-surface-variant">{r.value || "—"}</TableCell>
                         <TableCell className="text-on-surface">{r.reason}</TableCell>
                       </TableRow>

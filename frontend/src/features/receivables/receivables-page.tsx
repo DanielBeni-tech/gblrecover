@@ -96,7 +96,7 @@ export function ReceivablesPage() {
               <TableBody>
                 {data?.items.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="t-tabular text-primary-container">{r.invoiceNumber}</TableCell>
+                    <TableCell className="t-tabular text-success">{r.invoiceNumber}</TableCell>
                     <TableCell className="max-w-[200px] truncate font-medium">{r.customerId}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">{r.accountNumber}</TableCell>
                     <TableCell className="t-tabular text-right text-on-surface-variant">{xaf(r.initial)}</TableCell>

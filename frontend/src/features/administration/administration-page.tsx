@@ -35,7 +35,7 @@ export function AdministrationPage() {
               <TableBody>
                 {centers.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCell className="t-tabular text-primary-container">{c.id}</TableCell>
+                    <TableCell className="t-tabular text-success">{c.id}</TableCell>
                     <TableCell className="font-medium">{c.name}</TableCell>
                     <TableCell className="t-tabular text-on-surface-variant">
                       {agencies.filter((a) => a.center === c.name).length}

@@ -200,7 +200,7 @@ export function ClientsPage() {
               <TableBody>
                 {data?.items.map((c: UiCustomer) => (
                   <TableRow key={c.id}>
-                    <TableCell className="t-tabular text-primary-container">
+                    <TableCell className="t-tabular text-success">
                       <Link to={`/clients/${c.id}`} className="font-medium hover:underline">
                         {c.id}
                       </Link>
