@@ -13,7 +13,7 @@ router = APIRouter()
 @router.get("/centres", response_model=list[schemas.CentreRead])
 async def read_centres(
     page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=1, le=200),
+    page_size: int = Query(25, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
     return await crud.get_centres(db, page=page, page_size=page_size)
@@ -44,7 +44,7 @@ async def update_centre(centre_id: str, centre_in: schemas.CentreUpdate, current
 async def read_agencies(
     centre_id: Optional[str] = Query(None, alias="centre_id"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=1, le=200),
+    page_size: int = Query(25, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
     return await crud.get_agencies(db, centre_id=centre_id, page=page, page_size=page_size)

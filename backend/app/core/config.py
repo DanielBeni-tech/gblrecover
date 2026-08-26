@@ -3,7 +3,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 env_path = Path(__file__).resolve().parents[2] / ".env"
-load_dotenv(env_path, override=True)
+# Process env (Docker Compose, systemd, shell) must win over backend/.env,
+# which targets localhost for a backend run on the host.
+load_dotenv(env_path, override=False)
 
 
 database_url = os.getenv(
