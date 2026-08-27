@@ -4,13 +4,16 @@ import { ToastProvider } from "@/components/ui/toast";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/features/auth/login-page";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
+import { ReceivablesPage } from "@/features/receivables/receivables-page";
+import { CentresPage } from "@/features/performance/centres-page";
+import { AgencesPage } from "@/features/performance/agences-page";
+import { GestionnairesPage } from "@/features/performance/gestionnaires-page";
+import { AdministrationPage } from "@/features/administration/administration-page";
 import { ClientsPage } from "@/features/customers/clients-page";
 import { CustomerDetailPage } from "@/features/customers/customer-detail-page";
 import { InvoicesPage } from "@/features/invoices/invoices-page";
 import { PaymentsPage } from "@/features/payments/payments-page";
-import { ReceivablesPage } from "@/features/receivables/receivables-page";
 import { ImportsPage } from "@/features/imports/imports-page";
-import { AdministrationPage } from "@/features/administration/administration-page";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 20_000, retry: 1, refetchOnWindowFocus: false } },
@@ -41,15 +44,27 @@ export default function App() {
               </RequireAuth>
             }
           >
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
+            {/* Redirections et routes principales de la navigation */}
+            <Route path="/" element={<Navigate to="/vue-nationale" replace />} />
+            <Route path="/vue-nationale" element={<DashboardPage />} />
+            <Route path="/dashboard" element={<Navigate to="/vue-nationale" replace />} />
+
+            <Route path="/analyse-dette" element={<ReceivablesPage />} />
+            <Route path="/creances" element={<Navigate to="/analyse-dette" replace />} />
+
+            <Route path="/centres" element={<CentresPage />} />
+            <Route path="/agences" element={<AgencesPage />} />
+            <Route path="/gestionnaires" element={<GestionnairesPage />} />
+
+            <Route path="/administration" element={<AdministrationPage />} />
+
+            {/* Vues complémentaires */}
             <Route path="/clients" element={<ClientsPage />} />
             <Route path="/clients/:id" element={<CustomerDetailPage />} />
             <Route path="/factures" element={<InvoicesPage />} />
             <Route path="/paiements" element={<PaymentsPage />} />
-            <Route path="/creances" element={<ReceivablesPage />} />
             <Route path="/imports" element={<ImportsPage />} />
-            <Route path="/administration" element={<AdministrationPage />} />
+
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

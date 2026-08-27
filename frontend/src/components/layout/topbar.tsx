@@ -6,13 +6,18 @@ import { getClient } from "@/api/client";
 import { Avatar } from "@/components/ui/avatar";
 
 const labels: Record<string, string> = {
-  dashboard: "Dashboard",
+  "vue-nationale": "Vue nationale",
+  "analyse-dette": "Analyse de la dette",
+  centres: "Centres",
+  agences: "Agences",
+  gestionnaires: "Gestionnaires",
+  administration: "Administration",
+  dashboard: "Vue nationale",
   clients: "Clients",
   factures: "Factures",
   paiements: "Paiements",
-  creances: "Créances",
+  creances: "Analyse de la dette",
   imports: "Imports",
-  administration: "Administration",
 };
 
 export function Topbar({ onMenuOpen }: { onMenuOpen: () => void }) {
