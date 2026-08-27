@@ -6,7 +6,7 @@ import {
   Building2,
   Landmark,
   Users,
-  Settings,
+  FolderTree,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -55,8 +55,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       {/* Navigation Main */}
       <nav className="flex flex-1 flex-col overflow-y-auto px-3" aria-label="Navigation principale">
         {/* GROUPE 1: PILOTAGE */}
-        <div className="mb-5">
-          <div className="px-3.5 pb-2 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+        <div className="mb-4">
+          <div className="px-3.5 pb-1.5 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
             PILOTAGE
           </div>
           <div className="flex flex-col gap-1">
@@ -72,8 +72,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         {/* GROUPE 2: PERFORMANCE */}
-        <div className="mb-5">
-          <div className="px-3.5 pb-2 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+        <div className="mb-4">
+          <div className="px-3.5 pb-1.5 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
             PERFORMANCE
           </div>
           <div className="flex flex-col gap-1">
@@ -92,12 +92,17 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
         </div>
 
-        {/* BOTTOM SECTION: Administration */}
-        <div className="mt-auto border-t border-outline-variant pt-3">
-          <NavLink to="/administration" onClick={onClose} className={navLinkStyle}>
-            <Settings className="h-[18px] w-[18px] shrink-0 text-current" />
-            <span>Administration</span>
-          </NavLink>
+        {/* GROUPE 3: RÉFÉRENTIELS */}
+        <div className="mb-4">
+          <div className="px-3.5 pb-1.5 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
+            RÉFÉRENTIELS
+          </div>
+          <div className="flex flex-col gap-1">
+            <NavLink to="/referentiels" onClick={onClose} className={navLinkStyle}>
+              <FolderTree className="h-[18px] w-[18px] shrink-0 text-current" />
+              <span>Référentiels</span>
+            </NavLink>
+          </div>
         </div>
       </nav>
     </div>

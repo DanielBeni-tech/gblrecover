@@ -8,7 +8,7 @@ import { ReceivablesPage } from "@/features/receivables/receivables-page";
 import { CentresPage } from "@/features/performance/centres-page";
 import { AgencesPage } from "@/features/performance/agences-page";
 import { GestionnairesPage } from "@/features/performance/gestionnaires-page";
-import { AdministrationPage } from "@/features/administration/administration-page";
+import { ReferentielsPage } from "@/features/referentiels/referentiels-page";
 import { ClientsPage } from "@/features/customers/clients-page";
 import { CustomerDetailPage } from "@/features/customers/customer-detail-page";
 import { InvoicesPage } from "@/features/invoices/invoices-page";
@@ -56,7 +56,8 @@ export default function App() {
             <Route path="/agences" element={<AgencesPage />} />
             <Route path="/gestionnaires" element={<GestionnairesPage />} />
 
-            <Route path="/administration" element={<AdministrationPage />} />
+            <Route path="/referentiels" element={<ReferentielsPage />} />
+            <Route path="/administration" element={<Navigate to="/referentiels" replace />} />
 
             {/* Vues complémentaires */}
             <Route path="/clients" element={<ClientsPage />} />
