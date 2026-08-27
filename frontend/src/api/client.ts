@@ -518,8 +518,8 @@ export function listReceivablesCount(opts: { q?: string; status?: string } = {})
   return apiRequest<{ total: number }>("/receivables/count", { query: qs({ q: opts.q, status: opts.status }) });
 }
 
-export function listInvoicesCountFiltered(opts: { status?: string } = {}): Promise<{ total: number }> {
-  return apiRequest<{ total: number }>("/invoices/count", { query: qs({ status: opts.status }) });
+export function listInvoicesCountFiltered(opts: { status?: string; paymentState?: string } = {}): Promise<{ total: number }> {
+  return apiRequest<{ total: number }>("/invoices/count", { query: qs({ status: opts.status, payment_state: opts.paymentState }) });
 }
 
 export function listPaymentsCountFiltered(opts: { status?: string } = {}): Promise<{ total: number }> {
@@ -530,8 +530,36 @@ export function listPaymentsCountFiltered(opts: { status?: string } = {}): Promi
 // Factures (finance §3.6)
 // ============================================================
 
-export function listInvoices(opts: { account_id?: number; status?: string; due_date__gte?: string; due_date__lte?: string; outstanding_amount__gt?: number; page?: number; pageSize?: number } = {}): Promise<Invoice[]> {
-  return apiRequest<Invoice[]>("/invoices", { query: qs({ account_id: opts.account_id, status: opts.status, due_date__gte: opts.due_date__gte, due_date__lte: opts.due_date__lte, outstanding_amount__gt: opts.outstanding_amount__gt, page: opts.page, page_size: opts.pageSize }) });
+export function listInvoices(
+  opts: {
+    account_id?: number;
+    status?: string;
+    due_date__gte?: string;
+    due_date__lte?: string;
+    outstanding_amount__gt?: number;
+    /** Statut de règlement dérivé des montants (backend) : PAID | PARTIAL | UNPAID */
+    paymentState?: string;
+    /** Colonne de tri serveur : date_emission | montant_facture | paid_amount | outstanding_amount */
+    orderBy?: string;
+    order?: string;
+    page?: number;
+    pageSize?: number;
+  } = {},
+): Promise<Invoice[]> {
+  return apiRequest<Invoice[]>("/invoices", {
+    query: qs({
+      account_id: opts.account_id,
+      status: opts.status,
+      due_date__gte: opts.due_date__gte,
+      due_date__lte: opts.due_date__lte,
+      outstanding_amount__gt: opts.outstanding_amount__gt,
+      payment_state: opts.paymentState,
+      order_by: opts.orderBy,
+      order: opts.order,
+      page: opts.page,
+      page_size: opts.pageSize,
+    }),
+  });
 }
 
 export function getInvoice(invoiceId: string): Promise<Invoice> {

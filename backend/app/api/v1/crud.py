@@ -1,4 +1,4 @@
-from sqlalchemy import cast, func, or_, select, String, text
+from sqlalchemy import and_, cast, func, or_, select, String, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from passlib.context import CryptContext
@@ -552,24 +552,65 @@ async def get_account_payments(db: AsyncSession, account_id: int, page: int = 1,
 # Factures (CRUD)
 # ============================================================
 
+# Statut de règlement dérivé des montants : le champ `status` en base n'est pas
+# fiable (toutes les lignes importées valent 'OPEN'), donc l'état réel se calcule
+# depuis paid_amount / outstanding_amount (page Paiements, cf. maquette « Réglé »).
+_PAYMENT_STATE_CLAUSES = {
+    "PAID": Facture.outstanding_amount <= 0,
+    "PARTIAL": and_(Facture.paid_amount > 0, Facture.outstanding_amount > 0),
+    "UNPAID": and_(func.coalesce(Facture.paid_amount, 0) <= 0, Facture.outstanding_amount > 0),
+}
+
+_INVOICE_ORDERABLE = {
+    "date_emission": Facture.date_emission,
+    "montant_facture": Facture.montant_facture,
+    "paid_amount": Facture.paid_amount,
+    "outstanding_amount": Facture.outstanding_amount,
+}
+
+
+def _apply_invoice_filters(stmt, status: str | None, payment_state: str | None):
+    """Applique les filtres communs aux requêtes liste/comptage de factures."""
+    if status:
+        stmt = stmt.where(Facture.status == status)
+    clause = _PAYMENT_STATE_CLAUSES.get(payment_state or "")
+    if clause is not None:
+        stmt = stmt.where(clause)
+    return stmt
+
+
 async def count_invoices(db: AsyncSession) -> int:
     result = await db.execute(select(func.count(Facture.id_facture)))
     return result.scalar() or 0
 
 
-async def count_invoices_filtered(db: AsyncSession, status: str | None = None) -> int:
+async def count_invoices_filtered(
+    db: AsyncSession, status: str | None = None, payment_state: str | None = None
+) -> int:
     stmt = select(func.count(Facture.id_facture))
-    if status:
-        stmt = stmt.where(Facture.status == status)
+    stmt = _apply_invoice_filters(stmt, status, payment_state)
     result = await db.execute(stmt)
     return result.scalar() or 0
 
 
-async def get_invoices(db: AsyncSession, status: str | None = None, page: int = 1, page_size: int = 25):
+async def get_invoices(
+    db: AsyncSession,
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+    payment_state: str | None = None,
+    order_by: str | None = None,
+    order: str = "desc",
+):
     stmt = select(Facture)
-    if status:
-        stmt = stmt.where(Facture.status == status)
-    stmt = stmt.order_by(Facture.date_emission.desc()).limit(page_size).offset((page - 1) * page_size)
+    stmt = _apply_invoice_filters(stmt, status, payment_state)
+    col = _INVOICE_ORDERABLE.get(order_by or "")
+    if col is None:
+        stmt = stmt.order_by(Facture.date_emission.desc())
+    else:
+        direction = "asc" if (order or "").lower() == "asc" else "desc"
+        stmt = stmt.order_by(getattr(col, direction)())
+    stmt = stmt.limit(page_size).offset((page - 1) * page_size)
     result = await db.execute(stmt)
     return result.scalars().all()
 
