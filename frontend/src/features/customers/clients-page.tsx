@@ -182,7 +182,7 @@ export function ClientsPage() {
             <Label htmlFor="statut">Statut facturation</Label>
             <Select id="statut" value={statut} onChange={(e) => setStatut(e.target.value)}>
               <option value="">Tous les statuts</option>
-              <option value="En cours">En cours</option>
+              <option value="En cours de vérification">En cours</option>
               <option value="Arrêt">Arrêt</option>
             </Select>
           </div>
