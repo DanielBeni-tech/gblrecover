@@ -105,20 +105,32 @@ async def read_invoices(
     due_date__gte: Optional[str] = Query(None),
     due_date__lte: Optional[str] = Query(None),
     outstanding_amount__gt: Optional[float] = Query(None),
+    payment_state: Optional[str] = Query(None, description="Statut de règlement dérivé des montants : PAID | PARTIAL | UNPAID"),
+    order_by: Optional[str] = Query(None, description="Colonne de tri : date_emission | montant_facture | paid_amount | outstanding_amount"),
+    order: Optional[str] = Query(None, description="Direction du tri : asc | desc (défaut desc)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    return await crud.get_invoices(db, status=status, page=page, page_size=page_size)
+    return await crud.get_invoices(
+        db,
+        status=status,
+        page=page,
+        page_size=page_size,
+        payment_state=payment_state,
+        order_by=order_by,
+        order=order,
+    )
 
 
 @router.get("/invoices/count")
 async def count_invoices(
     status: Optional[str] = Query(None),
+    payment_state: Optional[str] = Query(None, description="Filtre dérivé des montants : PAID | PARTIAL | UNPAID"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    return {"total": await crud.count_invoices_filtered(db, status=status)}
+    return {"total": await crud.count_invoices_filtered(db, status=status, payment_state=payment_state)}
 
 
 @router.get("/invoices/{invoice_id}", response_model=schemas.InvoiceRead)
