@@ -14,10 +14,19 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { Avatar } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertTriangle, ArrowUpDown, FilterX, Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  Building2,
+  CreditCard,
+  FilterX,
+  Landmark,
+  Search,
+  UserCheck,
+  Users,
+} from "lucide-react";
 import { xaf } from "@/lib/format";
 
 type SortDir = "asc" | "desc";
@@ -58,29 +67,50 @@ export function ReferentielsPage() {
   const managersRaw = managersQ.data ?? [];
   const totalClients = clientsQ.data?.total ?? 0;
 
-  // Maps volumétriques et rapports
-  const agenciesByCentre = useMemo(() => {
-    const map = new Map<string, number>();
+  // Map des centres et agences depuis le rapport
+  const centreStatsMap = useMemo(() => {
+    const map = new Map<string, { agences: number; clients: number; comptes: number }>();
     for (const row of centresAgencesQ.data ?? []) {
       const centre = String(row.nom_centre ?? row.centre ?? row.code ?? "");
-      const count = Number(row.agences ?? row.nb_agences ?? row.total_agences ?? 0);
-      if (centre) map.set(centre, count);
+      const agences = Number(row.agences ?? row.nb_agences ?? row.total_agences ?? 0);
+      const clients = Number(row.clients ?? row.nb_clients ?? row.total_clients ?? 0);
+      const comptes = Number(row.comptes ?? row.nb_comptes ?? row.total_comptes ?? 0);
+      if (centre) map.set(centre, { agences, clients, comptes });
     }
     return map;
   }, [centresAgencesQ.data]);
 
+  // Map des gestionnaires depuis le rapport
   const gestionnaireDataMap = useMemo(() => {
-    const map = new Map<string, { dossiers: number; encours: number }>();
+    const map = new Map<string, { agence: string; centre: string; dossiers: number; encours: number }>();
     for (const row of gestionnairesReportQ.data ?? []) {
       const id = String(row.mat_gestionnaire ?? row.id_gestionnaire ?? "");
-      const dossiers = Number(row.dossiers ?? row.workload ?? row.nb_clients ?? 0);
+      const agence = String(row.nom_agence ?? row.agence ?? row.id_agence ?? "");
+      const centre = String(row.nom_centre ?? row.centre ?? "");
+      const dossiers = Number(row.dossiers ?? row.workload ?? row.nb_clients ?? row.nb_comptes ?? 0);
       const encours = Number(row.total_impaye ?? row.total_balance ?? row.encours ?? 0);
-      if (id) map.set(id, { dossiers, encours });
+      if (id) map.set(id, { agence, centre, dossiers, encours });
     }
     return map;
   }, [gestionnairesReportQ.data]);
 
-  // Calcul du nombre total de comptes
+  // Nombre de gestionnaires et comptes par agence
+  const agencyStatsMap = useMemo(() => {
+    const map = new Map<string, { gestionnaires: number; comptes: number }>();
+    for (const m of managersRaw) {
+      const gData = gestionnaireDataMap.get(m.mat_gestionnaire);
+      const agName = gData?.agence || "";
+      if (agName) {
+        const current = map.get(agName) ?? { gestionnaires: 0, comptes: 0 };
+        current.gestionnaires += 1;
+        current.comptes += gData?.dossiers ?? 0;
+        map.set(agName, current);
+      }
+    }
+    return map;
+  }, [managersRaw, gestionnaireDataMap]);
+
+  // Calcul du total des comptes
   const totalComptes = useMemo(() => {
     let sum = 0;
     for (const data of gestionnaireDataMap.values()) {
@@ -89,20 +119,16 @@ export function ReferentielsPage() {
     return sum > 0 ? sum : 50606;
   }, [gestionnaireDataMap]);
 
-  // Helper pour trier
+  // Helper de tri
   const toggleSort = (
     current: { key: string; dir: SortDir },
     setSort: (val: { key: string; dir: SortDir }) => void,
     key: string,
   ) => {
-    if (current.key === key) {
-      setSort({ key, dir: current.dir === "asc" ? "desc" : "asc" });
-    } else {
-      setSort({ key, dir: "asc" });
-    }
+    setSort({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" });
   };
 
-  // 1. Filtrage et tri des Centres
+  // 1. Centres filtrés et triés (Colonnes : Centre, Agences, Clients, Comptes)
   const processedCentres = useMemo(() => {
     let result = [...centresRaw];
     if (centreSearch.trim()) {
@@ -110,20 +136,28 @@ export function ReferentielsPage() {
       result = result.filter((c) => c.nom_centre.toLowerCase().includes(q));
     }
     result.sort((a, b) => {
+      const statsA = centreStatsMap.get(a.nom_centre);
+      const statsB = centreStatsMap.get(b.nom_centre);
       let valA: string | number = a.nom_centre;
       let valB: string | number = b.nom_centre;
       if (centreSort.key === "agences") {
-        valA = agenciesByCentre.get(a.nom_centre) ?? 0;
-        valB = agenciesByCentre.get(b.nom_centre) ?? 0;
+        valA = statsA?.agences ?? 0;
+        valB = statsB?.agences ?? 0;
+      } else if (centreSort.key === "clients") {
+        valA = statsA?.clients ?? 0;
+        valB = statsB?.clients ?? 0;
+      } else if (centreSort.key === "comptes") {
+        valA = statsA?.comptes ?? 0;
+        valB = statsB?.comptes ?? 0;
       }
       if (valA < valB) return centreSort.dir === "asc" ? -1 : 1;
       if (valA > valB) return centreSort.dir === "asc" ? 1 : -1;
       return 0;
     });
     return result;
-  }, [centresRaw, centreSearch, centreSort, agenciesByCentre]);
+  }, [centresRaw, centreSearch, centreSort, centreStatsMap]);
 
-  // 2. Filtrage et tri des Agences (Filtrées par selectedCentre si actif)
+  // 2. Agences filtrées et triées (Colonnes : Agence, Centre, Gestionnaires, Comptes)
   const processedAgencies = useMemo(() => {
     let result = [...agenciesRaw];
     if (selectedCentre) {
@@ -139,25 +173,59 @@ export function ReferentielsPage() {
       );
     }
     result.sort((a, b) => {
-      let valA: string | number = a.nom_agence ?? a.id_agence;
-      let valB: string | number = b.nom_agence ?? b.id_agence;
+      const nameA = a.nom_agence ?? a.id_agence;
+      const nameB = b.nom_agence ?? b.id_agence;
+      const statsA = agencyStatsMap.get(nameA) ?? agencyStatsMap.get(a.id_agence);
+      const statsB = agencyStatsMap.get(nameB) ?? agencyStatsMap.get(b.id_agence);
+      let valA: string | number = nameA;
+      let valB: string | number = nameB;
       if (agenceSort.key === "nom_centre") {
         valA = a.nom_centre;
         valB = b.nom_centre;
-      } else if (agenceSort.key === "id_agence") {
-        valA = a.id_agence;
-        valB = b.id_agence;
+      } else if (agenceSort.key === "gestionnaires") {
+        valA = statsA?.gestionnaires ?? 0;
+        valB = statsB?.gestionnaires ?? 0;
+      } else if (agenceSort.key === "comptes") {
+        valA = statsA?.comptes ?? 0;
+        valB = statsB?.comptes ?? 0;
       }
       if (valA < valB) return agenceSort.dir === "asc" ? -1 : 1;
       if (valA > valB) return agenceSort.dir === "asc" ? 1 : -1;
       return 0;
     });
     return result;
-  }, [agenciesRaw, selectedCentre, agenceSearch, agenceSort]);
+  }, [agenciesRaw, selectedCentre, agenceSearch, agenceSort, agencyStatsMap]);
 
-  // 3. Filtrage et tri des Gestionnaires (Filtrés par selectedAgence ou selectedCentre si actif)
+  // 3. Gestionnaires filtrés et triés (Colonnes : Gestionnaire, Matricule, Agence, Centre, Comptes, Encours, Contact)
   const processedManagers = useMemo(() => {
     let result = [...managersRaw];
+
+    if (selectedAgence) {
+      const agenceObj = agenciesRaw.find(
+        (a) => a.nom_agence === selectedAgence || a.id_agence === selectedAgence,
+      );
+      const targetName = (agenceObj?.nom_agence ?? selectedAgence).toLowerCase().trim();
+      const targetId = (agenceObj?.id_agence ?? selectedAgence).toLowerCase().trim();
+
+      result = result.filter((m) => {
+        const gData = gestionnaireDataMap.get(m.mat_gestionnaire);
+        const mAgName = (gData?.agence ?? "").toLowerCase().trim();
+        const mAgId = (m as any).id_agence ? String((m as any).id_agence).toLowerCase().trim() : "";
+        return (
+          mAgName === targetName ||
+          mAgId === targetId ||
+          (targetName && mAgName.includes(targetName)) ||
+          (targetName && targetName.includes(mAgName))
+        );
+      });
+    } else if (selectedCentre) {
+      const targetCentre = selectedCentre.toLowerCase().trim();
+      result = result.filter((m) => {
+        const gData = gestionnaireDataMap.get(m.mat_gestionnaire);
+        const mCentre = (gData?.centre ?? "").toLowerCase().trim();
+        return mCentre === targetCentre || mCentre.includes(targetCentre);
+      });
+    }
 
     if (managerSearch.trim()) {
       const q = managerSearch.toLowerCase();
@@ -178,7 +246,13 @@ export function ReferentielsPage() {
       if (managerSort.key === "mat_gestionnaire") {
         valA = a.mat_gestionnaire;
         valB = b.mat_gestionnaire;
-      } else if (managerSort.key === "dossiers") {
+      } else if (managerSort.key === "agence") {
+        valA = gDataA?.agence ?? "";
+        valB = gDataB?.agence ?? "";
+      } else if (managerSort.key === "centre") {
+        valA = gDataA?.centre ?? "";
+        valB = gDataB?.centre ?? "";
+      } else if (managerSort.key === "comptes") {
         valA = gDataA?.dossiers ?? 0;
         valB = gDataB?.dossiers ?? 0;
       } else if (managerSort.key === "encours") {
@@ -192,16 +266,15 @@ export function ReferentielsPage() {
     });
 
     return result;
-  }, [managersRaw, managerSearch, managerSort, gestionnaireDataMap]);
+  }, [managersRaw, selectedAgence, selectedCentre, managerSearch, managerSort, gestionnaireDataMap, agenciesRaw]);
 
-  // Réinitialiser les filtres hiérarchiques
   const resetFilters = () => {
     setSelectedCentre(null);
     setSelectedAgence(null);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Référentiels organisationnels"
         subtitle="Vue d'ensemble, exploration et drill-down dans la structure des centres, agences et gestionnaires."
@@ -214,55 +287,38 @@ export function ReferentielsPage() {
         </div>
       )}
 
-      {/* Bandeau de KPIs (5 tuiles) */}
+      {/* Bandeau de KPIs avec Icônes (5 tuiles) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard label="Centres" value={String(centresRaw.length)} tone="default" />
-        <KpiCard label="Agences" value={String(agenciesRaw.length)} tone="default" />
-        <KpiCard label="Gestionnaires" value={String(managersRaw.length)} tone="default" />
-        <KpiCard label="Clients Totaux" value={totalClients > 0 ? totalClients.toLocaleString("fr-FR") : "—"} tone="default" />
-        <KpiCard label="Comptes Rattachés" value={totalComptes.toLocaleString("fr-FR")} tone="default" />
+        <KpiCard label="Centres" value={String(centresRaw.length)} icon={Building2} tone="default" />
+        <KpiCard label="Agences" value={String(agenciesRaw.length)} icon={Landmark} tone="default" />
+        <KpiCard label="Gestionnaires" value={String(managersRaw.length)} icon={Users} tone="default" />
+        <KpiCard label="Clients Totaux" value={totalClients > 0 ? totalClients.toLocaleString("fr-FR") : "—"} icon={UserCheck} tone="default" />
+        <KpiCard label="Comptes Rattachés" value={totalComptes.toLocaleString("fr-FR")} icon={CreditCard} tone="default" />
       </div>
 
-      {/* Barre de badges de filtres actifs */}
-      {(selectedCentre || selectedAgence) && (
-        <div className="flex flex-wrap items-center gap-2 rounded-card border border-primary/20 bg-brand-50 p-3 text-[13px]">
-          <span className="font-semibold text-primary">Filtres actifs :</span>
-          {selectedCentre && (
-            <Badge tone="primary" className="flex items-center gap-1.5 px-2.5 py-1">
-              Centre : {selectedCentre}
-              <button onClick={() => setSelectedCentre(null)} aria-label="Supprimer filtre centre" className="ml-1 hover:text-error">
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          {selectedAgence && (
-            <Badge tone="primary" className="flex items-center gap-1.5 px-2.5 py-1">
-              Agence : {selectedAgence}
-              <button onClick={() => setSelectedAgence(null)} aria-label="Supprimer filtre agence" className="ml-1 hover:text-error">
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          <Button variant="ghost" size="sm" onClick={resetFilters} className="ml-auto flex items-center gap-1 text-[12px] text-primary">
-            <FilterX className="h-3.5 w-3.5" />
-            Réinitialiser les filtres
-          </Button>
-        </div>
-      )}
-
       {/* Grille 2 colonnes : Centres & Agences */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* TABLEAU 1: CENTRES DE GESTION */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* TABLEAU 1: CENTRES DE GESTION (Centre, Agences, Clients, Comptes) */}
         <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-outline-variant pb-3">
-            <CardTitle className="text-[16px] font-semibold text-on-surface">Centres de Gestion</CardTitle>
-            <div className="relative w-48">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-outline-variant py-2.5 px-4">
+            <div>
+              <CardTitle className="text-[15px] font-semibold text-on-surface">Centres de Gestion</CardTitle>
+              {selectedCentre && (
+                <p className="text-[11px] font-medium text-primary flex items-center gap-1 mt-0.5">
+                  Centre filtré : {selectedCentre}
+                  <button onClick={() => setSelectedCentre(null)} className="ml-1 text-slate-400 hover:text-error">
+                    ✕
+                  </button>
+                </p>
+              )}
+            </div>
+            <div className="relative w-44">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-outline" />
               <Input
-                placeholder="Filtrer centre..."
+                placeholder="Recherche centre..."
                 value={centreSearch}
                 onChange={(e) => setCentreSearch(e.target.value)}
-                className="h-8.5 pl-8 text-[12px]"
+                className="h-8 pl-8 text-[12px]"
               />
             </div>
           </CardHeader>
@@ -272,7 +328,7 @@ export function ReferentielsPage() {
                 <TableRow>
                   <TableHead className="cursor-pointer" onClick={() => toggleSort(centreSort, setCentreSort, "nom_centre")}>
                     <div className="flex items-center gap-1">
-                      Nom du Centre
+                      Centre
                       <ArrowUpDown className="h-3 w-3" />
                     </div>
                   </TableHead>
@@ -282,43 +338,51 @@ export function ReferentielsPage() {
                       <ArrowUpDown className="h-3 w-3" />
                     </div>
                   </TableHead>
-                  <TableHead className="text-right">Action</TableHead>
+                  <TableHead className="cursor-pointer text-right" onClick={() => toggleSort(centreSort, setCentreSort, "clients")}>
+                    <div className="flex items-center justify-end gap-1">
+                      Clients
+                      <ArrowUpDown className="h-3 w-3" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer text-right" onClick={() => toggleSort(centreSort, setCentreSort, "comptes")}>
+                    <div className="flex items-center justify-end gap-1">
+                      Comptes
+                      <ArrowUpDown className="h-3 w-3" />
+                    </div>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 4 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={3}>
+                      <TableCell colSpan={4}>
                         <Skeleton className="h-6 w-full" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : processedCentres.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="py-6 text-center text-[13px] text-on-surface-variant">
+                    <TableCell colSpan={4} className="py-6 text-center text-[13px] text-on-surface-variant">
                       Aucun centre trouvé.
                     </TableCell>
                   </TableRow>
                 ) : (
                   processedCentres.map((c) => {
                     const isSelected = selectedCentre === c.nom_centre;
-                    const agCount = agenciesByCentre.get(c.nom_centre) ?? 0;
+                    const stats = centreStatsMap.get(c.nom_centre);
                     return (
                       <TableRow
                         key={c.nom_centre}
                         onClick={() => setSelectedCentre(isSelected ? null : c.nom_centre)}
                         className={`cursor-pointer transition-colors ${
-                          isSelected ? "bg-brand-50 hover:bg-brand-100/70" : "hover:bg-surface-container-low"
+                          isSelected ? "bg-brand-50/90 font-semibold text-primary" : "hover:bg-surface-container-low"
                         }`}
                       >
-                        <TableCell className="font-semibold text-on-surface">{c.nom_centre}</TableCell>
-                        <TableCell className="text-right font-medium">{agCount}</TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" variant={isSelected ? "primary" : "outline"} className="h-7 text-[11px]">
-                            {isSelected ? "Sélectionné" : "Filtrer"}
-                          </Button>
-                        </TableCell>
+                        <TableCell className="font-semibold">{c.nom_centre}</TableCell>
+                        <TableCell className="text-right font-medium">{stats?.agences ?? "—"}</TableCell>
+                        <TableCell className="text-right font-medium">{stats?.clients ? stats.clients.toLocaleString("fr-FR") : "—"}</TableCell>
+                        <TableCell className="text-right font-medium">{stats?.comptes ? stats.comptes.toLocaleString("fr-FR") : "—"}</TableCell>
                       </TableRow>
                     );
                   })
@@ -328,20 +392,34 @@ export function ReferentielsPage() {
           </div>
         </Card>
 
-        {/* TABLEAU 2: AGENCES */}
+        {/* TABLEAU 2: AGENCES (Agence, Centre, Gestionnaires, Comptes) */}
         <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-outline-variant pb-3">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-outline-variant py-2.5 px-4">
             <div>
-              <CardTitle className="text-[16px] font-semibold text-on-surface">Agences</CardTitle>
-              {selectedCentre && <p className="text-[12px] text-primary">Centre : {selectedCentre}</p>}
+              <CardTitle className="text-[15px] font-semibold text-on-surface">Agences</CardTitle>
+              {selectedCentre ? (
+                <p className="text-[11px] font-medium text-primary flex items-center gap-1">
+                  Filtré par centre : {selectedCentre}
+                  {selectedAgence && <span className="text-slate-400">| Agence : {selectedAgence}</span>}
+                </p>
+              ) : (
+                selectedAgence && (
+                  <p className="text-[11px] font-medium text-primary flex items-center gap-1">
+                    Agence filtrée : {selectedAgence}
+                    <button onClick={() => setSelectedAgence(null)} className="ml-1 text-slate-400 hover:text-error">
+                      ✕
+                    </button>
+                  </p>
+                )
+              )}
             </div>
-            <div className="relative w-48">
+            <div className="relative w-44">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-outline" />
               <Input
-                placeholder="Filtrer agence..."
+                placeholder="Recherche agence..."
                 value={agenceSearch}
                 onChange={(e) => setAgenceSearch(e.target.value)}
-                className="h-8.5 pl-8 text-[12px]"
+                className="h-8 pl-8 text-[12px]"
               />
             </div>
           </CardHeader>
@@ -357,44 +435,56 @@ export function ReferentielsPage() {
                   </TableHead>
                   <TableHead className="cursor-pointer" onClick={() => toggleSort(agenceSort, setAgenceSort, "nom_centre")}>
                     <div className="flex items-center gap-1">
-                      Centre Parent
+                      Centre
                       <ArrowUpDown className="h-3 w-3" />
                     </div>
                   </TableHead>
-                  <TableHead className="text-right">Statut</TableHead>
+                  <TableHead className="cursor-pointer text-right" onClick={() => toggleSort(agenceSort, setAgenceSort, "gestionnaires")}>
+                    <div className="flex items-center justify-end gap-1">
+                      Gestionnaires
+                      <ArrowUpDown className="h-3 w-3" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer text-right" onClick={() => toggleSort(agenceSort, setAgenceSort, "comptes")}>
+                    <div className="flex items-center justify-end gap-1">
+                      Comptes
+                      <ArrowUpDown className="h-3 w-3" />
+                    </div>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 4 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={3}>
+                      <TableCell colSpan={4}>
                         <Skeleton className="h-6 w-full" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : processedAgencies.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="py-6 text-center text-[13px] text-on-surface-variant">
+                    <TableCell colSpan={4} className="py-6 text-center text-[13px] text-on-surface-variant">
                       Aucune agence trouvée.
                     </TableCell>
                   </TableRow>
                 ) : (
                   processedAgencies.map((a) => {
-                    const isSelected = selectedAgence === a.nom_agence || selectedAgence === a.id_agence;
+                    const agName = a.nom_agence ?? a.id_agence;
+                    const isSelected = selectedAgence === agName || selectedAgence === a.id_agence;
+                    const stats = agencyStatsMap.get(agName) ?? agencyStatsMap.get(a.id_agence);
                     return (
                       <TableRow
                         key={a.id_agence}
-                        onClick={() => setSelectedAgence(isSelected ? null : a.nom_agence ?? a.id_agence)}
+                        onClick={() => setSelectedAgence(isSelected ? null : agName)}
                         className={`cursor-pointer transition-colors ${
-                          isSelected ? "bg-brand-50 hover:bg-brand-100/70" : "hover:bg-surface-container-low"
+                          isSelected ? "bg-brand-50/90 font-semibold text-primary" : "hover:bg-surface-container-low"
                         }`}
                       >
-                        <TableCell className="font-semibold text-on-surface">{a.nom_agence ?? a.id_agence}</TableCell>
+                        <TableCell className="font-semibold text-on-surface">{agName}</TableCell>
                         <TableCell className="text-on-surface-variant text-[13px]">{a.nom_centre}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge tone="success">Active</Badge>
-                        </TableCell>
+                        <TableCell className="text-right font-medium">{stats?.gestionnaires ?? "—"}</TableCell>
+                        <TableCell className="text-right font-medium">{stats?.comptes ? stats.comptes.toLocaleString("fr-FR") : "—"}</TableCell>
                       </TableRow>
                     );
                   })
@@ -407,10 +497,20 @@ export function ReferentielsPage() {
 
       {/* TABLEAU 3: GESTIONNAIRES DE RECOUVREMENT */}
       <Card className="overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between border-b border-outline-variant pb-3">
+        <CardHeader className="flex flex-row items-center justify-between border-b border-outline-variant py-2.5 px-4">
           <div>
-            <CardTitle className="text-[16px] font-semibold text-on-surface">Gestionnaires de Recouvrement</CardTitle>
-            {selectedAgence && <p className="text-[12px] text-primary">Filtré par agence : {selectedAgence}</p>}
+            <CardTitle className="text-[15px] font-semibold text-on-surface">Gestionnaires de Recouvrement</CardTitle>
+            {(selectedAgence || selectedCentre) && (
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-[11px] font-medium text-primary">
+                  Filtré par : {selectedAgence ? `Agence (${selectedAgence})` : `Centre (${selectedCentre})`}
+                </p>
+                <Button variant="ghost" size="sm" onClick={resetFilters} className="h-5 px-1.5 text-[11px] text-slate-500 hover:text-error">
+                  <FilterX className="h-3 w-3 mr-1" />
+                  Réinitialiser tous les filtres
+                </Button>
+              </div>
+            )}
           </div>
           <div className="relative w-64">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-outline" />
@@ -418,12 +518,12 @@ export function ReferentielsPage() {
               placeholder="Rechercher nom, matricule..."
               value={managerSearch}
               onChange={(e) => setManagerSearch(e.target.value)}
-              className="h-8.5 pl-8 text-[12px]"
+              className="h-8 pl-8 text-[12px]"
             />
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="max-h-[260px] overflow-y-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -439,15 +539,27 @@ export function ReferentielsPage() {
                       <ArrowUpDown className="h-3 w-3" />
                     </div>
                   </TableHead>
-                  <TableHead className="cursor-pointer text-right" onClick={() => toggleSort(managerSort, setManagerSort, "dossiers")}>
+                  <TableHead className="cursor-pointer" onClick={() => toggleSort(managerSort, setManagerSort, "agence")}>
+                    <div className="flex items-center gap-1">
+                      Agence
+                      <ArrowUpDown className="h-3 w-3" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer" onClick={() => toggleSort(managerSort, setManagerSort, "centre")}>
+                    <div className="flex items-center gap-1">
+                      Centre
+                      <ArrowUpDown className="h-3 w-3" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="cursor-pointer text-right" onClick={() => toggleSort(managerSort, setManagerSort, "comptes")}>
                     <div className="flex items-center justify-end gap-1">
-                      Comptes Gérés
+                      Comptes
                       <ArrowUpDown className="h-3 w-3" />
                     </div>
                   </TableHead>
                   <TableHead className="cursor-pointer text-right" onClick={() => toggleSort(managerSort, setManagerSort, "encours")}>
                     <div className="flex items-center justify-end gap-1">
-                      Encours Géré
+                      Encours
                       <ArrowUpDown className="h-3 w-3" />
                     </div>
                   </TableHead>
@@ -458,14 +570,14 @@ export function ReferentielsPage() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={5}>
+                      <TableCell colSpan={7}>
                         <Skeleton className="h-6 w-full" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : processedManagers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-[13px] text-on-surface-variant">
+                    <TableCell colSpan={7} className="py-8 text-center text-[13px] text-on-surface-variant">
                       Aucun gestionnaire correspondant trouvé.
                     </TableCell>
                   </TableRow>
@@ -475,18 +587,24 @@ export function ReferentielsPage() {
                     return (
                       <TableRow key={m.mat_gestionnaire}>
                         <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar name={m.nom_gestionnaire} className="h-8 w-8 text-[12px]" />
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={m.nom_gestionnaire} className="h-7 w-7 text-[11px]" />
                             <span className="font-semibold text-on-surface">{m.nom_gestionnaire}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono text-[13px] font-medium text-on-surface-variant">
+                        <TableCell className="font-mono text-[12px] font-medium text-on-surface-variant">
                           {m.mat_gestionnaire}
                         </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {gData?.dossiers ? `${gData.dossiers} comptes` : "—"}
+                        <TableCell className="text-[13px] text-on-surface-variant">
+                          {gData?.agence || "—"}
                         </TableCell>
-                        <TableCell className="text-right font-mono font-semibold text-primary">
+                        <TableCell className="text-[13px] text-on-surface-variant">
+                          {gData?.centre || "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {gData?.dossiers ? `${gData.dossiers}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-semibold text-primary text-[13px]">
                           {gData?.encours ? xaf(gData.encours) : "—"}
                         </TableCell>
                         <TableCell className="text-right text-[12px] text-on-surface-variant">
