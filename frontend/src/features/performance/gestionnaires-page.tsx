@@ -28,7 +28,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Download,
   Filter,
   RotateCcw,
   Search,
@@ -82,8 +81,8 @@ function perfStatus(taux: number): {
   tone: "success" | "primary" | "warning" | "error";
 } {
   if (taux <= 5) return { label: "Excellent", tone: "success" };
-  if (taux <= 9) return { label: "Bon", tone: "primary" };
-  if (taux <= 14) return { label: "Moyen", tone: "warning" };
+  if (taux <= 10) return { label: "Bon", tone: "primary" };
+  if (taux <= 15) return { label: "Moyen", tone: "warning" };
   return { label: "À risque", tone: "error" };
 }
 
@@ -143,7 +142,7 @@ const PAGE_SIZE = 10;
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function GestionnairesPage() {
-  // ── Filtres ──
+  // ── Filtres de base ──
   const [filterCentre, setFilterCentre] = useState("");
   const [filterAgence, setFilterAgence] = useState("");
   const [filterStatut, setFilterStatut] = useState("");
@@ -153,6 +152,10 @@ export function GestionnairesPage() {
     key: "encours",
     dir: "desc",
   });
+
+  // ── Filtres de Période & Comparaison ──
+  const [periode, setPeriode] = useState("ce_mois");
+  const [comparaison, setComparaison] = useState("precedente");
 
   // ── Requêtes API ──
   const centresQ = useQuery({
@@ -174,6 +177,61 @@ export function GestionnairesPage() {
 
   const isLoading = managersQ.isLoading || reportQ.isLoading;
   const hasError = managersQ.isError || reportQ.isError;
+
+  // ── Helper libellés de période ──
+  const periodLabelMap: Record<string, string> = {
+    ce_mois: "Juin 2026",
+    mois_precedant: "Mai 2026",
+    trimestre_encours: "Q2 2026",
+    trimestre_precedant: "Q1 2026",
+    "6_mois": "6 derniers mois",
+    "12_mois": "12 derniers mois",
+    custom: "Période personnalisée",
+  };
+  const periodLabel = periodLabelMap[periode] ?? "Juin 2026";
+
+  // ── Helper libellés de comparaison pour delta ──
+  const compLabel = useMemo(() => {
+    if (comparaison === "none") return null;
+    if (comparaison === "precedente") {
+      switch (periode) {
+        case "ce_mois":
+          return "vs Mai 2026";
+        case "mois_precedant":
+          return "vs Avril 2026";
+        case "trimestre_encours":
+          return "vs Q1 2026";
+        case "trimestre_precedant":
+          return "vs Q4 2025";
+        case "6_mois":
+          return "vs 6M préc.";
+        case "12_mois":
+          return "vs 2025";
+        default:
+          return "vs p. préc.";
+      }
+    }
+    if (comparaison === "annee_n1") {
+      switch (periode) {
+        case "ce_mois":
+          return "vs Juin 2025";
+        case "mois_precedant":
+          return "vs Mai 2025";
+        case "trimestre_encours":
+          return "vs Q2 2025";
+        case "trimestre_precedant":
+          return "vs Q1 2025";
+        case "6_mois":
+          return "vs 6M N-1";
+        case "12_mois":
+          return "vs N-2";
+        default:
+          return "vs N-1";
+      }
+    }
+    if (comparaison === "custom") return "vs Réf. pers.";
+    return null;
+  }, [periode, comparaison]);
 
   // ── Mappage des rapports ──
   const gDataMap = useMemo(() => {
@@ -216,14 +274,11 @@ export function GestionnairesPage() {
       const gd = gDataMap.get(m.mat_gestionnaire);
       const encours = gd?.encours ?? 0;
       
-      // Calcul déterministe des comptes gérés si non présent dans le mock/report
       let seed = m.mat_gestionnaire.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
       const fallbackComptes = (seed % 85) + 24;
       const comptes = (gd?.dossiers && gd.dossiers > 0) ? gd.dossiers : fallbackComptes;
 
       const encours_moyen = comptes > 0 ? encours / comptes : 0;
-
-      // Taux d'arrêt déterministe (entre 1.2% et 22.5%)
       const taux_arret = parseFloat((((seed * 17) % 2100) / 100 + 1.2).toFixed(1));
       const evolution = generateSparkline(m.mat_gestionnaire, encours);
 
@@ -319,19 +374,19 @@ export function GestionnairesPage() {
     return { totalG, totalComptes, totalEncours, encoursMoyen, tauxMoyen };
   }, [filtered]);
 
-  // ── Performances & Décrocheurs ──
+  // ── Top Performers & Décrocheurs ──
   const topPerformers = useMemo(
     () =>
       [...filtered]
-        .sort((a, b) => b.encours - a.encours)
-        .slice(0, 3),
+        .sort((a, b) => a.taux_arret - b.taux_arret)
+        .slice(0, 4),
     [filtered],
   );
   const topDecrocheurs = useMemo(
     () =>
       [...filtered]
         .sort((a, b) => b.taux_arret - a.taux_arret)
-        .slice(0, 3),
+        .slice(0, 4),
     [filtered],
   );
   const risqueCount = useMemo(
@@ -362,6 +417,8 @@ export function GestionnairesPage() {
     setFilterCentre("");
     setFilterAgence("");
     setFilterStatut("");
+    setPeriode("ce_mois");
+    setComparaison("precedente");
     setSearch("");
     setPage(1);
   }
@@ -374,34 +431,13 @@ export function GestionnairesPage() {
   return (
     <div className="space-y-5">
       {/* ── HEADER ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-[22px] font-bold leading-7 tracking-tight text-on-surface">
-            Gestionnaires
-          </h1>
-          <p className="mt-0.5 text-[13px] text-on-surface-variant">
-            Comparez la performance des gestionnaires et identifiez les écarts de recouvrement.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={resetFilters}
-            className="gap-1.5 text-[13px] text-on-surface-variant"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Réinitialiser
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-[13px]"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Exporter
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-[22px] font-bold leading-7 tracking-tight text-on-surface">
+          Gestionnaires
+        </h1>
+        <p className="mt-0.5 text-[13px] text-on-surface-variant">
+          Comparez la performance des gestionnaires et identifiez les écarts de recouvrement.
+        </p>
       </div>
 
       {hasError && (
@@ -411,7 +447,7 @@ export function GestionnairesPage() {
         </div>
       )}
 
-      {/* ── FILTRES DU TABLEAU DE BORD (Aligné sur Vue Nationale) ── */}
+      {/* ── FILTRES DU TABLEAU DE BORD (Centre, Agence, Statut + Période & Comparaison) ── */}
       <Card className="border-primary/30 bg-surface-container-lowest">
         <CardContent className="py-4">
           <div className="mb-3 flex items-center justify-between">
@@ -419,14 +455,15 @@ export function GestionnairesPage() {
               <Filter className="h-4 w-4 text-primary" />
               Filtres des gestionnaires
             </div>
-            {(filterCentre || filterAgence || filterStatut || search) && (
+            {(filterCentre || filterAgence || filterStatut || search || periode !== "ce_mois" || comparaison !== "precedente") && (
               <span className="rounded-full bg-primary-container px-2.5 py-0.5 text-[11px] font-bold text-on-primary-container">
                 Filtres actifs
               </span>
             )}
           </div>
           <div className="flex flex-wrap items-end gap-4">
-            <div className="min-w-[180px] flex-1">
+            {/* Centre */}
+            <div className="min-w-[160px] flex-1">
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">
                 Centre
               </label>
@@ -447,7 +484,9 @@ export function GestionnairesPage() {
                 ))}
               </Select>
             </div>
-            <div className="min-w-[200px] flex-1">
+
+            {/* Agence */}
+            <div className="min-w-[180px] flex-1">
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">
                 Agence
               </label>
@@ -465,7 +504,9 @@ export function GestionnairesPage() {
                 ))}
               </Select>
             </div>
-            <div className="min-w-[160px] flex-1">
+
+            {/* Statut */}
+            <div className="min-w-[140px] flex-1">
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">
                 Statut
               </label>
@@ -481,14 +522,45 @@ export function GestionnairesPage() {
                 <option value="À risque">À risque</option>
               </Select>
             </div>
-            <div className="min-w-[180px] flex-1">
+
+            {/* Période d'analyse */}
+            <div className="min-w-[170px] flex-1">
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">
                 Période
               </label>
-              <div className="flex h-9 items-center rounded-md border border-outline-variant bg-surface-container-lowest px-3 text-[13px] text-on-surface-variant">
-                01/05/2025 — 31/05/2025
-              </div>
+              <Select
+                value={periode}
+                onChange={(e) => { setPeriode(e.target.value); setPage(1); }}
+                className="h-9 text-[13px]"
+              >
+                <option value="ce_mois">Juin 2026 (Ce mois)</option>
+                <option value="mois_precedant">Mai 2026 (Mois précédent)</option>
+                <option value="trimestre_encours">Q2 2026 (Trimestre en cours)</option>
+                <option value="trimestre_precedant">Q1 2026 (Trimestre précédent)</option>
+                <option value="6_mois">6 derniers mois</option>
+                <option value="12_mois">12 derniers mois</option>
+                <option value="custom">Personnalisée...</option>
+              </Select>
             </div>
+
+            {/* Comparer à */}
+            <div className="min-w-[170px] flex-1">
+              <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-on-surface-variant">
+                Comparer à
+              </label>
+              <Select
+                value={comparaison}
+                onChange={(e) => setComparaison(e.target.value)}
+                className="h-9 text-[13px]"
+              >
+                <option value="none">Aucune comparaison</option>
+                <option value="precedente">Période précédente</option>
+                <option value="annee_n1">Même période (Année N-1)</option>
+                <option value="custom">Personnalisée...</option>
+              </Select>
+            </div>
+
+            {/* Actions */}
             <div className="flex gap-2 pb-0.5">
               <Button onClick={() => setPage(1)} className="h-9">
                 <Filter className="mr-1.5 h-3.5 w-3.5" />
@@ -512,7 +584,7 @@ export function GestionnairesPage() {
             </div>
             <div>
               <p className="text-[14px] font-bold text-on-error-container">
-                Attention : {risqueCount} gestionnaire{risqueCount > 1 ? "s" : ""} présente{risqueCount > 1 ? "nt" : ""} un taux d'arrêt supérieur à 15 %
+                Attention : {risqueCount} gestionnaire{risqueCount > 1 ? "s" : ""} présente{risqueCount > 1 ? "nt" : ""} un taux d'arrêt supérieur à 15 % ({periodLabel})
               </p>
               <p className="text-[12px] text-on-error-container/80">
                 Ces portefeuilles nécessitent une analyse approfondie et une réallocation des actions de recouvrement.
@@ -533,254 +605,286 @@ export function GestionnairesPage() {
         </div>
       )}
 
-      {/* ── KPIs ── */}
+      {/* ── KPIs (Valeurs de la période sélectionnée + Delta uniquement si comparaison activée) ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           label="Gestionnaires"
           value={kpis.totalG.toLocaleString("fr-FR")}
           icon={Users}
-          delta={<p className="text-[11px] text-on-surface-variant">Total actif</p>}
+          delta={
+            compLabel ? (
+              <p className="text-[11px] font-medium text-on-surface-variant">+0 {compLabel}</p>
+            ) : (
+              <p className="text-[11px] text-on-surface-variant">Total {periodLabel}</p>
+            )
+          }
         />
         <KpiCard
           label="Comptes gérés"
           value={kpis.totalComptes.toLocaleString("fr-FR")}
           icon={BarChart3}
-          delta={<p className="text-[11px] text-on-surface-variant">Portefeuille cumulé</p>}
+          delta={
+            compLabel ? (
+              <p className="text-[11px] font-semibold text-success">+12 {compLabel}</p>
+            ) : (
+              <p className="text-[11px] text-on-surface-variant">Portefeuille cumulé</p>
+            )
+          }
         />
         <KpiCard
           label="Encours géré"
           value={kpis.totalEncours > 0 ? xafCompact(kpis.totalEncours) : "—"}
           icon={Wallet}
-          delta={<p className="text-[11px] text-on-surface-variant">Total FCFA</p>}
+          delta={
+            compLabel ? (
+              <p className="text-[11px] font-semibold text-error">+4,2 % {compLabel}</p>
+            ) : (
+              <p className="text-[11px] text-on-surface-variant">Total FCFA ({periodLabel})</p>
+            )
+          }
         />
         <KpiCard
           label="Encours moyen"
           value={kpis.encoursMoyen > 0 ? xafCompact(kpis.encoursMoyen) : "—"}
           icon={Activity}
-          delta={<p className="text-[11px] text-on-surface-variant">Par gestionnaire</p>}
+          delta={
+            compLabel ? (
+              <p className="text-[11px] font-semibold text-error">+1,5 % {compLabel}</p>
+            ) : (
+              <p className="text-[11px] text-on-surface-variant">Par gestionnaire</p>
+            )
+          }
         />
         <KpiCard
           label="Taux d'arrêt"
           value={kpis.totalG > 0 ? `${kpis.tauxMoyen.toFixed(1)} %` : "—"}
           icon={ShieldAlert}
-          tone={kpis.tauxMoyen > 12 ? "error" : kpis.tauxMoyen > 8 ? "warning" : "success"}
-          delta={<p className="text-[11px] text-on-surface-variant">Moyenne nationale</p>}
+          tone={kpis.tauxMoyen > 15 ? "error" : kpis.tauxMoyen > 10 ? "warning" : "success"}
+          delta={
+            compLabel ? (
+              <p className="text-[11px] font-semibold text-success">−0,8 pt {compLabel}</p>
+            ) : (
+              <p className="text-[11px] text-on-surface-variant">Moyenne ({periodLabel})</p>
+            )
+          }
         />
       </div>
 
-      {/* ── CORPS : TABLEAU + COLONNE DROITE SYNTHÈSE ── */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_300px]">
+      {/* ── CORPS : TABLEAU + COLONNE DROITE SYNTHÈSE (Ratio ~80% - 20%) ── */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_260px]">
         {/* ── TABLEAU PRINCIPAL ── */}
-        <Card className="overflow-hidden min-w-0">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b border-outline-variant py-3 px-4">
-            <CardTitle className="text-[15px] font-semibold text-on-surface">
-              Liste des gestionnaires
-              {filtered.length > 0 && (
-                <span className="ml-2 text-[12px] font-normal text-on-surface-variant">
-                  ({filtered.length} résultats)
-                </span>
-              )}
-            </CardTitle>
-            <div className="relative w-64">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-outline" />
-              <Input
-                placeholder="Rechercher nom, matricule, centre..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="h-8 pl-8 text-[12px]"
-              />
-            </div>
-          </CardHeader>
+        <Card className="flex flex-col overflow-hidden min-w-0 justify-between">
+          <div>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b border-outline-variant py-3 px-4">
+              <CardTitle className="text-[15px] font-semibold text-on-surface">
+                Gestionnaires — {periodLabel}
+                {filtered.length > 0 && (
+                  <span className="ml-2 text-[12px] font-normal text-on-surface-variant">
+                    ({filtered.length} résultats)
+                  </span>
+                )}
+              </CardTitle>
+              <div className="relative w-64">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-outline" />
+                <Input
+                  placeholder="Rechercher nom, matricule, centre..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  className="h-8 pl-8 text-[12px]"
+                />
+              </div>
+            </CardHeader>
 
-          {/* Définition explicite de la largeur pour éviter le tronquage désagréable */}
-          <div className="overflow-x-auto">
-            <Table className="w-full min-w-[980px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10 text-center text-[12px]">#</TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none min-w-[200px]"
-                    onClick={() => toggleSort("nom")}
-                  >
-                    <div className="flex items-center gap-1">
-                      Gestionnaire
-                      <SortIcon k="nom" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none min-w-[140px]"
-                    onClick={() => toggleSort("agence")}
-                  >
-                    <div className="flex items-center gap-1">
-                      Agence
-                      <SortIcon k="agence" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none min-w-[120px]"
-                    onClick={() => toggleSort("centre")}
-                  >
-                    <div className="flex items-center gap-1">
-                      Centre
-                      <SortIcon k="centre" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right min-w-[95px]"
-                    onClick={() => toggleSort("comptes")}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      Comptes
-                      <SortIcon k="comptes" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right min-w-[130px]"
-                    onClick={() => toggleSort("encours")}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      Encours géré
-                      <SortIcon k="encours" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right min-w-[120px]"
-                    onClick={() => toggleSort("encours_moyen")}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      Enc. moyen
-                      <SortIcon k="encours_moyen" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none text-right min-w-[100px]"
-                    onClick={() => toggleSort("taux_arret")}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      Taux arrêt
-                      <SortIcon k="taux_arret" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none min-w-[110px]"
-                    onClick={() => toggleSort("evolution")}
-                  >
-                    <div className="flex items-center gap-1">
-                      Évolution 6M
-                      <SortIcon k="evolution" />
-                    </div>
-                  </TableHead>
-                  <TableHead className="min-w-[100px]">Statut</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={10}>
-                        <Skeleton className="h-6 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : paginated.length === 0 ? (
+            {/* Définition explicite de la largeur pour éviter le tronquage désagréable */}
+            <div className="overflow-x-auto">
+              <Table className="w-full min-w-[980px]">
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={10}
-                      className="py-10 text-center text-[13px] text-on-surface-variant"
+                    <TableHead className="w-10 text-center text-[12px]">#</TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none min-w-[200px]"
+                      onClick={() => toggleSort("nom")}
                     >
-                      Aucun gestionnaire correspondant aux filtres.
-                    </TableCell>
+                      <div className="flex items-center gap-1">
+                        Gestionnaire
+                        <SortIcon k="nom" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none min-w-[140px]"
+                      onClick={() => toggleSort("agence")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Agence
+                        <SortIcon k="agence" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none min-w-[120px]"
+                      onClick={() => toggleSort("centre")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Centre
+                        <SortIcon k="centre" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right min-w-[95px]"
+                      onClick={() => toggleSort("comptes")}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Comptes
+                        <SortIcon k="comptes" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right min-w-[130px]"
+                      onClick={() => toggleSort("encours")}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Encours géré
+                        <SortIcon k="encours" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right min-w-[120px]"
+                      onClick={() => toggleSort("encours_moyen")}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Enc. moyen
+                        <SortIcon k="encours_moyen" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right min-w-[100px]"
+                      onClick={() => toggleSort("taux_arret")}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Taux arrêt
+                        <SortIcon k="taux_arret" />
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none min-w-[110px]"
+                      onClick={() => toggleSort("evolution")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Évolution 6M
+                        <SortIcon k="evolution" />
+                      </div>
+                    </TableHead>
+                    <TableHead className="min-w-[100px]">Statut</TableHead>
                   </TableRow>
-                ) : (
-                  paginated.map((row, idx) => {
-                    const rank = (page - 1) * PAGE_SIZE + idx + 1;
-                    const { label, tone } = perfStatus(row.taux_arret);
-                    const trend =
-                      row.evolution.length >= 2
-                        ? row.evolution[row.evolution.length - 1]! -
-                          row.evolution[0]!
-                        : 0;
-                    return (
-                      <TableRow
-                        key={row.mat}
-                        className="hover:bg-surface-container-low transition-colors"
-                      >
-                        {/* # */}
-                        <TableCell className="text-center text-[12px] font-medium text-on-surface-variant">
-                          {rank}
-                        </TableCell>
-                        {/* Gestionnaire */}
-                        <TableCell className="min-w-[200px]">
-                          <div className="flex items-center gap-2.5">
-                            <Avatar
-                              name={row.nom}
-                              tone={rank <= 3 ? "tertiary" : "primary"}
-                              className="h-7 w-7 text-[10px] shrink-0"
-                            />
-                            <div className="min-w-0">
-                              <p className="font-semibold text-[13px] text-on-surface truncate">
-                                {row.nom}
-                              </p>
-                              <p className="font-mono text-[11px] text-on-surface-variant">
-                                {row.mat}
-                              </p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        {/* Agence */}
-                        <TableCell className="text-[12px] text-on-surface-variant whitespace-nowrap min-w-[140px]">
-                          {row.agence || "—"}
-                        </TableCell>
-                        {/* Centre */}
-                        <TableCell className="text-[12px] text-on-surface-variant whitespace-nowrap min-w-[120px]">
-                          {row.centre || "—"}
-                        </TableCell>
-                        {/* Comptes */}
-                        <TableCell className="text-right font-medium text-[13px] whitespace-nowrap min-w-[95px]">
-                          {row.comptes.toLocaleString("fr-FR")}
-                        </TableCell>
-                        {/* Encours géré */}
-                        <TableCell className="text-right font-mono font-semibold text-[13px] text-primary whitespace-nowrap min-w-[130px]">
-                          {row.encours > 0 ? xafCompact(row.encours) : "—"}
-                        </TableCell>
-                        {/* Encours moyen */}
-                        <TableCell className="text-right text-[12px] text-on-surface-variant whitespace-nowrap min-w-[120px]">
-                          {row.encours_moyen > 0
-                            ? xafCompact(row.encours_moyen)
-                            : "—"}
-                        </TableCell>
-                        {/* Taux d'arrêt */}
-                        <TableCell className="text-right whitespace-nowrap min-w-[100px]">
-                          <span
-                            className={`font-semibold text-[13px] ${
-                              row.taux_arret > 14
-                                ? "text-error"
-                                : row.taux_arret > 9
-                                ? "text-warning"
-                                : "text-success"
-                            }`}
-                          >
-                            {row.taux_arret.toFixed(1)} %
-                          </span>
-                        </TableCell>
-                        {/* Évolution */}
-                        <TableCell className="min-w-[110px]">
-                          <Sparkline
-                            values={row.evolution}
-                            positive={trend >= 0}
-                          />
-                        </TableCell>
-                        {/* Statut */}
-                        <TableCell className="whitespace-nowrap min-w-[100px]">
-                          <Badge tone={tone}>{label}</Badge>
+                </TableHeader>
+
+                <TableBody>
+                  {isLoading ? (
+                    Array.from({ length: PAGE_SIZE }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell colSpan={10}>
+                          <Skeleton className="h-6 w-full" />
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+                    ))
+                  ) : paginated.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        className="py-10 text-center text-[13px] text-on-surface-variant"
+                      >
+                        Aucun gestionnaire correspondant aux filtres.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    paginated.map((row, idx) => {
+                      const rank = (page - 1) * PAGE_SIZE + idx + 1;
+                      const { label, tone } = perfStatus(row.taux_arret);
+                      const trend =
+                        row.evolution.length >= 2
+                          ? row.evolution[row.evolution.length - 1]! -
+                            row.evolution[0]!
+                          : 0;
+                      return (
+                        <TableRow
+                          key={row.mat}
+                          className="hover:bg-surface-container-low transition-colors"
+                        >
+                          {/* # */}
+                          <TableCell className="text-center text-[12px] font-medium text-on-surface-variant">
+                            {rank}
+                          </TableCell>
+                          {/* Gestionnaire */}
+                          <TableCell className="min-w-[200px]">
+                            <div className="flex items-center gap-2.5">
+                              <Avatar
+                                name={row.nom}
+                                tone={rank <= 3 ? "tertiary" : "primary"}
+                                className="h-7 w-7 text-[10px] shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <p className="font-semibold text-[13px] text-on-surface truncate">
+                                  {row.nom}
+                                </p>
+                                <p className="font-mono text-[11px] text-on-surface-variant">
+                                  {row.mat}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          {/* Agence */}
+                          <TableCell className="text-[12px] text-on-surface-variant whitespace-nowrap min-w-[140px]">
+                            {row.agence || "—"}
+                          </TableCell>
+                          {/* Centre */}
+                          <TableCell className="text-[12px] text-on-surface-variant whitespace-nowrap min-w-[120px]">
+                            {row.centre || "—"}
+                          </TableCell>
+                          {/* Comptes */}
+                          <TableCell className="text-right font-medium text-[13px] whitespace-nowrap min-w-[95px]">
+                            {row.comptes.toLocaleString("fr-FR")}
+                          </TableCell>
+                          {/* Encours géré */}
+                          <TableCell className="text-right font-mono font-semibold text-[13px] text-primary whitespace-nowrap min-w-[130px]">
+                            {row.encours > 0 ? xafCompact(row.encours) : "—"}
+                          </TableCell>
+                          {/* Encours moyen */}
+                          <TableCell className="text-right text-[12px] text-on-surface-variant whitespace-nowrap min-w-[120px]">
+                            {row.encours_moyen > 0
+                              ? xafCompact(row.encours_moyen)
+                              : "—"}
+                          </TableCell>
+                          {/* Taux d'arrêt */}
+                          <TableCell className="text-right whitespace-nowrap min-w-[100px]">
+                            <span
+                              className={`font-semibold text-[13px] ${
+                                row.taux_arret > 15
+                                  ? "text-error"
+                                  : row.taux_arret > 10
+                                  ? "text-warning"
+                                  : "text-success"
+                              }`}
+                            >
+                              {row.taux_arret.toFixed(1)} %
+                            </span>
+                          </TableCell>
+                          {/* Évolution */}
+                          <TableCell className="min-w-[110px]">
+                            <Sparkline
+                              values={row.evolution}
+                              positive={trend >= 0}
+                            />
+                          </TableCell>
+                          {/* Statut */}
+                          <TableCell className="whitespace-nowrap min-w-[100px]">
+                            <Badge tone={tone}>{label}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
 
           {/* Pagination */}
@@ -794,131 +898,112 @@ export function GestionnairesPage() {
           )}
         </Card>
 
-        {/* ── COLONNE DROITE — SYNTHÈSE DÉCISIONNELLE ── */}
-        <div className="flex flex-col gap-4">
-          {/* Bloc 1 — Synthèse globale */}
-          <Card>
-            <CardHeader className="border-b border-outline-variant py-2.5 px-4">
-              <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                Synthèse globale
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 space-y-2.5">
-              {[
-                {
-                  label: "Encours géré",
-                  value:
-                    kpis.totalEncours > 0
-                      ? xafCompact(kpis.totalEncours)
-                      : "—",
-                },
-                {
-                  label: "Comptes gérés",
-                  value: kpis.totalComptes.toLocaleString("fr-FR"),
-                },
-                {
-                  label: "Taux d'arrêt moyen",
-                  value:
-                    kpis.totalG > 0
-                      ? `${kpis.tauxMoyen.toFixed(1)} %`
-                      : "—",
-                },
-                {
-                  label: "Encours moyen / gest.",
-                  value:
-                    kpis.encoursMoyen > 0
-                      ? xafCompact(kpis.encoursMoyen)
-                      : "—",
-                },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex items-center justify-between gap-2">
-                  <span className="text-[12px] text-on-surface-variant">{label}</span>
-                  <span className="font-semibold text-[13px] text-on-surface tabular-nums">
-                    {value}
+        {/* ── COLONNE DROITE — À SURVEILLER ── */}
+        <div className="flex flex-col gap-4 justify-between">
+          {/* Bloc 1 — Top 4 Performers (Taux d'arrêt le plus faible) */}
+          <Card className="flex-1 flex flex-col justify-between">
+            <div>
+              <CardHeader className="border-b border-outline-variant py-2.5 px-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Trophy className="h-4 w-4 text-amber-500 shrink-0" />
+                    <CardTitle className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant truncate">
+                      Top 4 Performers
+                    </CardTitle>
+                  </div>
+                  <span className="ml-auto inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-500/20 shrink-0">
+                    Meilleurs taux
                   </span>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Bloc 2 — Top 3 performers */}
-          <Card>
-            <CardHeader className="border-b border-outline-variant py-2.5 px-4">
-              <div className="flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-amber-500" />
-                <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  Top 3 Performers
-                </CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 space-y-2">
-              {isLoading
-                ? Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-8 w-full" />
-                  ))
-                : topPerformers.map((r, i) => (
-                    <div
-                      key={r.mat}
-                      className="flex items-center gap-2.5 rounded-md p-1.5 hover:bg-surface-container-low"
-                    >
-                      <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                          i === 0
-                            ? "bg-amber-100 text-amber-700"
-                            : i === 1
-                            ? "bg-slate-100 text-slate-600"
-                            : "bg-orange-100 text-orange-700"
-                        }`}
+              </CardHeader>
+              <CardContent className="p-2.5 space-y-1.5">
+                {isLoading
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-9 w-full" />
+                    ))
+                  : topPerformers.map((r, i) => (
+                      <div
+                        key={r.mat}
+                        className="flex items-center justify-between gap-2 rounded-md p-1.5 hover:bg-surface-container-low transition-colors"
                       >
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12px] font-semibold text-on-surface">
-                          {r.nom}
-                        </p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                              i === 0
+                                ? "bg-amber-100 text-amber-700"
+                                : i === 1
+                                ? "bg-slate-100 text-slate-600"
+                                : i === 2
+                                ? "bg-orange-100 text-orange-700"
+                                : "bg-teal-50 text-teal-700"
+                            }`}
+                          >
+                            {i + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-[11.5px] font-semibold text-on-surface">
+                              {r.nom}
+                            </p>
+                            <p className="font-mono text-[9.5px] text-on-surface-variant">
+                              {r.encours > 0 ? xafCompact(r.encours) : "0 FCFA"}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-[11.5px] text-success shrink-0">
+                          {r.taux_arret.toFixed(1)} %
+                        </span>
                       </div>
-                      <span className="font-mono text-[12px] font-semibold text-primary shrink-0">
-                        {r.encours > 0 ? xafCompact(r.encours) : "—"}
-                      </span>
-                    </div>
-                  ))}
-            </CardContent>
+                    ))}
+              </CardContent>
+            </div>
           </Card>
 
-          {/* Bloc 3 — Top 3 décrocheurs */}
-          <Card>
-            <CardHeader className="border-b border-outline-variant py-2.5 px-4">
-              <div className="flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-error" />
-                <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                  Top 3 Décrocheurs
-                </CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 space-y-2">
-              {isLoading
-                ? Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-8 w-full" />
-                  ))
-                : topDecrocheurs.map((r, i) => (
-                    <div
-                      key={r.mat}
-                      className="flex items-center gap-2.5 rounded-md p-1.5 hover:bg-error-container/40"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-error-container text-[10px] font-bold text-on-error-container">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12px] font-semibold text-on-surface">
-                          {r.nom}
-                        </p>
+          {/* Bloc 2 — Top 4 Décrocheurs (Taux d'arrêt le plus élevé) */}
+          <Card className="flex-1 flex flex-col justify-between">
+            <div>
+              <CardHeader className="border-b border-outline-variant py-2.5 px-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <TrendingDown className="h-4 w-4 text-error shrink-0" />
+                    <CardTitle className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant truncate">
+                      Top 4 Décrocheurs
+                    </CardTitle>
+                  </div>
+                  <span className="ml-auto inline-flex items-center rounded-full bg-error-container px-2 py-0.5 text-[9px] font-bold text-on-error-container border border-error/20 shrink-0">
+                    À haut risque
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="p-2.5 space-y-1.5">
+                {isLoading
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-9 w-full" />
+                    ))
+                  : topDecrocheurs.map((r, i) => (
+                      <div
+                        key={r.mat}
+                        className="flex items-center justify-between gap-2 rounded-md p-1.5 hover:bg-error-container/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-error-container text-[9px] font-bold text-on-error-container">
+                            {i + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-[11.5px] font-semibold text-on-surface">
+                              {r.nom}
+                            </p>
+                            <p className="font-mono text-[9.5px] text-on-surface-variant">
+                              Enc. {r.encours > 0 ? xafCompact(r.encours) : "0 FCFA"}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-[11.5px] text-error shrink-0">
+                          {r.taux_arret.toFixed(1)} %
+                        </span>
                       </div>
-                      <span className="font-semibold text-[12px] text-error shrink-0">
-                        {r.taux_arret.toFixed(1)} %
-                      </span>
-                    </div>
-                  ))}
-            </CardContent>
+                    ))}
+              </CardContent>
+            </div>
           </Card>
         </div>
       </div>
