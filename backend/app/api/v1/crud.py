@@ -1104,13 +1104,64 @@ async def reports_centres_agences(db):
 
 
 async def reports_gestionnaires(db):
-    result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires ORDER BY total_recouvre DESC LIMIT 100"))
-    return result.mappings().all()
+    try:
+        result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires ORDER BY total_recouvre DESC LIMIT 100"))
+        return result.mappings().all()
+    except Exception:
+        try:
+            result = await db.execute(text("SELECT * FROM vw_analyse_gestionnaires LIMIT 100"))
+            return result.mappings().all()
+        except Exception:
+            query = text("""
+                SELECT 
+                    g.mat_gestionnaire,
+                    g.nom_gestionnaire,
+                    a.nom_agence,
+                    c.nom_centre,
+                    COUNT(DISTINCT cp.num_compte) AS volume_comptes,
+                    COUNT(DISTINCT cp.num_compte) AS dossiers,
+                    COUNT(DISTINCT cp.num_compte) AS workload,
+                    COALESCE(SUM(cp.balance), 0) AS total_impaye,
+                    COALESCE(SUM(cp.balance), 0) AS encours
+                FROM gestionnaire g
+                LEFT JOIN compte cp ON g.mat_gestionnaire = cp.mat_gestionnaire
+                LEFT JOIN agence a ON cp.id_agence = a.id_agence
+                LEFT JOIN centre c ON a.nom_centre = c.nom_centre
+                GROUP BY g.mat_gestionnaire, g.nom_gestionnaire, a.nom_agence, c.nom_centre
+            """)
+            result = await db.execute(query)
+            return result.mappings().all()
 
 
 async def reports_gestionnaire(db, manager_id):
-    result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires WHERE mat_gestionnaire = :mid ORDER BY periode DESC"), {"mid": manager_id})
-    return result.mappings().all()
+    try:
+        result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires WHERE mat_gestionnaire = :mid ORDER BY periode DESC"), {"mid": manager_id})
+        return result.mappings().all()
+    except Exception:
+        try:
+            result = await db.execute(text("SELECT * FROM vw_analyse_gestionnaires WHERE mat_gestionnaire = :mid"), {"mid": manager_id})
+            return result.mappings().all()
+        except Exception:
+            query = text("""
+                SELECT 
+                    g.mat_gestionnaire,
+                    g.nom_gestionnaire,
+                    a.nom_agence,
+                    c.nom_centre,
+                    COUNT(DISTINCT cp.num_compte) AS volume_comptes,
+                    COUNT(DISTINCT cp.num_compte) AS dossiers,
+                    COALESCE(SUM(cp.balance), 0) AS total_impaye,
+                    COALESCE(SUM(cp.balance), 0) AS encours
+                FROM gestionnaire g
+                LEFT JOIN compte cp ON g.mat_gestionnaire = cp.mat_gestionnaire
+                LEFT JOIN agence a ON cp.id_agence = a.id_agence
+                LEFT JOIN centre c ON a.nom_centre = c.nom_centre
+                WHERE g.mat_gestionnaire = :mid
+                GROUP BY g.mat_gestionnaire, g.nom_gestionnaire, a.nom_agence, c.nom_centre
+            """)
+            result = await db.execute(query, {"mid": manager_id})
+            return result.mappings().all()
+
 
 
 async def reports_marches(db):

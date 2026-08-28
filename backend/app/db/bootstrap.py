@@ -172,8 +172,46 @@ async def _ensure_users(conn) -> list[str]:
     return credentials
 
 
+import os
+
+
+def _find_views_sql() -> str | None:
+    explicit = [
+        "/app/database/views.sql",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "database", "views.sql")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "database", "views.sql")),
+    ]
+    for path in explicit:
+        if os.path.isfile(path):
+            return path
+    cur = os.path.abspath(os.path.dirname(__file__))
+    for _ in range(8):
+        candidate = os.path.join(cur, "database", "views.sql")
+        if os.path.isfile(candidate):
+            return candidate
+        parent = os.path.abspath(os.path.join(cur, ".."))
+        if parent == cur:
+            break
+        cur = parent
+    return None
+
+
+async def _ensure_views(conn) -> None:
+    try:
+        res = await conn.execute(text("SELECT 1 FROM pg_views WHERE viewname = 'vw_performance_gestionnaires'"))
+        if not res.scalar():
+            vpath = _find_views_sql()
+            if vpath and os.path.isfile(vpath):
+                with open(vpath, encoding="utf-8") as f:
+                    sql_content = f.read()
+                await conn.execute(text(sql_content))
+                logger.info("Executed database/views.sql automatically.")
+    except Exception as e:
+        logger.warning(f"Could not check or execute views.sql: {e}")
+
+
 async def bootstrap_db(engine) -> list[str]:
-    """Crée les tables d'auth et sème rôles + comptes de démo.
+    """Crée les tables d'auth et sème rôles + comptes de démo + vues.
 
     Idempotent : peut être appelé à chaque démarrage sans effet de bord.
     Retourne la liste des identifiants de démonstration actifs.
@@ -181,5 +219,6 @@ async def bootstrap_db(engine) -> list[str]:
     async with engine.begin() as conn:
         await _apply_ddl(conn)
         await _ensure_roles(conn)
+        await _ensure_views(conn)
         credentials = await _ensure_users(conn)
     return credentials

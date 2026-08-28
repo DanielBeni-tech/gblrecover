@@ -17,7 +17,7 @@ async def read_clients(
     client_type: Optional[str] = Query(None),
     marche: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=1, le=200),
+    page_size: int = Query(25, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
 ):
     return await crud.get_clients(db, q=q, status=status, client_type=client_type, marche=marche, page=page, page_size=page_size)
@@ -53,7 +53,7 @@ async def list_clients_agg(
     agence: Optional[str] = Query(None),
     statut_facturation: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
 ):
     """Liste paginée de clients avec agrégations financières en une seule requête."""
