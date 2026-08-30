@@ -336,13 +336,17 @@ async def count_clients_list(
     agence: str | None = None,
     statut_facturation: str | None = None,
 ) -> int:
-    """Compte les clients en respectant les mêmes filtres org que get_clients_list."""
+    """Compte les clients en respectant les mêmes filtres org que get_clients_list.
+    
+    CORRECTION: Utilise DISTINCT ON sur code_client pour éviter les doublons
+    caused by multi-account clients.
+    """
     where_sql, params = _clients_list_where(q=q, marche=marche, centre=centre, agence=agence, statut_facturation=statut_facturation)
     sql = f"""
-    SELECT COUNT(*) AS total
+    SELECT COUNT(DISTINCT c.code_client) AS total
     FROM client c
     JOIN (
-        SELECT DISTINCT ON (co3.code_client) co3.*
+        SELECT DISTINCT ON (co3.code_client) co3.code_client, co3.id_agence
         FROM compte co3
         ORDER BY co3.code_client, co3.num_compte
     ) co ON c.code_client = co.code_client
@@ -377,6 +381,11 @@ async def get_clients_list(
 ):
     """Liste paginée de clients avec agrégations en une seule requête SQL.
 
+    CORRECTION CRITIQUE: Les agrégations de facture sont maintenant effectuées dans
+    une sous-requête GROUP BY (facture_agg), AVANT la jointure avec compte.
+    Cela évite le produit cartésien qui multipliait les montants par le nombre
+    de factures par compte.
+    
     Retourne des dicts contenant les champs client + comptes agrégés + agence/centre/gestionnaire.
     Tri par défaut : créances (outstanding) décroissant pour prioriser le recouvrement.
     """
@@ -384,9 +393,30 @@ async def get_clients_list(
         q=q, marche=marche, centre=centre, agence=agence, statut_facturation=statut_facturation
     )
 
-    # DISTINCT ON pour n'avoir qu'une ligne par client (premier compte)
-    # + sous-requête agrégée pour les totaux par client
+    # CORRECTION: Agrégation des factures par compte AVANT la jointure avec compte/client
+    # pour éviter la multiplication cartésienne des montants.
     sql = f"""
+    WITH facture_agg AS (
+        SELECT
+            num_compte,
+            SUM(COALESCE(outstanding_amount, 0)) AS total_outstanding,
+            SUM(COALESCE(montant_facture, 0)) AS total_facture,
+            SUM(COALESCE(paid_amount, 0)) AS total_paid
+        FROM facture
+        GROUP BY num_compte
+    ),
+    compte_agg AS (
+        SELECT
+            co2.code_client,
+            SUM(COALESCE(co2.balance, 0)) AS total_balance,
+            COUNT(co2.num_compte) AS nb_comptes,
+            COALESCE(SUM(fa.total_outstanding), 0) AS total_outstanding,
+            COALESCE(SUM(fa.total_facture), 0) AS total_facture,
+            COALESCE(SUM(fa.total_paid), 0) AS total_paid
+        FROM compte co2
+        LEFT JOIN facture_agg fa ON co2.num_compte = fa.num_compte
+        GROUP BY co2.code_client
+    )
     SELECT
         c.code_client,
         c.raison_sociale,
@@ -407,20 +437,10 @@ async def get_clients_list(
         co.e_bill,
         co.identification
     FROM client c
+    JOIN compte_agg agg ON c.code_client = agg.code_client
     JOIN (
-        SELECT
-            co2.code_client,
-            SUM(COALESCE(co2.balance, 0)) AS total_balance,
-            COUNT(co2.num_compte) AS nb_comptes,
-            SUM(COALESCE(f.outstanding_amount, 0)) AS total_outstanding,
-            SUM(COALESCE(f.montant_facture, 0)) AS total_facture,
-            SUM(COALESCE(f.paid_amount, 0)) AS total_paid
-        FROM compte co2
-        LEFT JOIN facture f ON co2.num_compte = f.num_compte
-        GROUP BY co2.code_client
-    ) agg ON c.code_client = agg.code_client
-    JOIN (
-        SELECT DISTINCT ON (co3.code_client) co3.*
+        SELECT DISTINCT ON (co3.code_client) co3.code_client, co3.id_agence,
+               co3.mat_gestionnaire, co3.statut_facturation, co3.e_bill, co3.identification
         FROM compte co3
         ORDER BY co3.code_client, co3.num_compte
     ) co ON c.code_client = co.code_client
