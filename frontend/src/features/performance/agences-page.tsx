@@ -73,19 +73,27 @@ interface AlertItem {
 
 type ViewMode = "list" | "agency-detail";
 
-interface ReportRow {
-  [key: string]: unknown;
-}
-
 // ============================================================================
 // HELPERS
 // ============================================================================
 
 function getStatus(row: AgencyPerformance): AgencyStatus {
+  // Règles métier (cohérentes avec les seuils d'alerte) :
+  // - CRITIQUE : taux d'arrêt > 50% OU KYC défaillant > 70% OU taux recouvrement < 30%
+  // - ATTENTION : taux d'arrêt entre 30% et 50% OU KYC défaillant entre 50% et 70% OU taux recouvrement entre 30% et 50%
+  // - PERFORMANT : sinon
   const stopRate = row.stopRate ?? 0;
   const kycRate = row.tauxKycDefaillant ?? 0;
-  if (stopRate > 50 || kycRate > 70) return "critique";
-  if (stopRate >= 30 && stopRate <= 50) return "attention";
+  const recRate = row.tauxRecouvrement;
+
+  if (stopRate > 50 || kycRate > 70 || (recRate !== null && recRate < 30)) return "critique";
+  if (
+    (stopRate >= 30 && stopRate <= 50) ||
+    (kycRate > 50 && kycRate <= 70) ||
+    (recRate !== null && recRate >= 30 && recRate < 50)
+  ) {
+    return "attention";
+  }
   return "performant";
 }
 
@@ -105,26 +113,22 @@ function getStatusBgColor(status: AgencyStatus): string {
   }
 }
 
-function numberValue(row: ReportRow, ...keys: string[]): number {
-  for (const key of keys) {
-    const val = row[key];
-    if (val !== null && val !== undefined && typeof val === "number") return val;
-  }
-  return 0;
-}
-
 function formatXafFull(value: number): string {
   if (!Number.isFinite(value) || value === 0) return "—";
   return `${value.toLocaleString("fr-FR")} XAF`;
 }
 
 function formatXafCompact(value: number): string {
-  if (!Number.isFinite(value) || value === 0) return "—";
-  if (value >= 1_000_000_000) {
+  if (!Number.isFinite(value)) return "—";
+  if (value === 0) return "0";
+  if (Math.abs(value) >= 1_000_000_000) {
     return `${(value / 1_000_000_000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} Md`;
   }
-  if (value >= 1_000_000) {
+  if (Math.abs(value) >= 1_000_000) {
     return `${(value / 1_000_000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} M`;
+  }
+  if (Math.abs(value) >= 1_000) {
+    return `${(value / 1_000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} k`;
   }
   return value.toLocaleString("fr-FR");
 }
@@ -162,36 +166,39 @@ function AlertSection({
   const alerts = useMemo((): AlertItem[] => {
     const items: AlertItem[] = [];
     rows.forEach((row) => {
+      // Alerte taux d'arrêt critique (> 50%)
       if ((row.stopRate ?? 0) > 50) {
         items.push({
           id: `stop-${row.id}`,
           agencyId: row.id,
           agencyName: row.name,
           type: "stop_rate",
-          message: `Taux d'arret critique : ${formatTaux(row.stopRate)} sur ${formatNumber(row.accounts)} comptes`,
+          message: `Taux d'arrêt critique : ${formatTaux(row.stopRate)} sur ${formatNumber(row.accounts)} comptes`,
           value: row.stopRate ?? 0,
           threshold: 50,
         });
       }
+      // Alerte KYC défaillant élevé (> 70%)
       if ((row.tauxKycDefaillant ?? 0) > 70) {
         items.push({
           id: `kyc-${row.id}`,
           agencyId: row.id,
           agencyName: row.name,
           type: "kyc",
-          message: `Indice KYC defaillant eleve : ${formatTaux(row.tauxKycDefaillant)} de clients non identifies`,
+          message: `Indice KYC défaillant élevé : ${formatTaux(row.tauxKycDefaillant)} de clients non identifiés`,
           value: row.tauxKycDefaillant ?? 0,
           threshold: 70,
         });
       }
-      if ((row.tauxRecouvrement ?? 100) < 30 && row.tauxRecouvrement !== null) {
+      // Alerte recouvrement insuffisant (< 30%) — null = pas de facturation = pas d'alerte
+      if (row.tauxRecouvrement !== null && row.tauxRecouvrement < 30) {
         items.push({
           id: `rec-${row.id}`,
           agencyId: row.id,
           agencyName: row.name,
           type: "recouvrement",
           message: `Taux de recouvrement insuffisant : ${formatTaux(row.tauxRecouvrement)}`,
-          value: row.tauxRecouvrement ?? 0,
+          value: row.tauxRecouvrement,
           threshold: 30,
         });
       }
@@ -363,12 +370,20 @@ function AgencyDetailView({
   );
 
   // Score de sante global (0-100)
+  // - stopRate : plus c'est haut, plus c'est mauvais
+  // - tauxRecouvrement : plus c'est bas, plus c'est mauvais (null = pas de facturation = on ne pénalise pas)
+  // - tauxKycDefaillant : plus c'est haut, plus c'est mauvais
   const healthScore = useMemo(() => {
     let score = 100;
+    // Pénalités taux d'arrêt
     if ((agency.stopRate ?? 0) > 50) score -= 40;
     else if ((agency.stopRate ?? 0) > 30) score -= 20;
-    if ((agency.tauxRecouvrement ?? 100) < 30) score -= 30;
-    else if ((agency.tauxRecouvrement ?? 100) < 50) score -= 15;
+    // Pénalités taux de recouvrement (null = pas de données = pas de pénalité)
+    if (agency.tauxRecouvrement !== null) {
+      if (agency.tauxRecouvrement < 30) score -= 30;
+      else if (agency.tauxRecouvrement < 50) score -= 15;
+    }
+    // Pénalités KYC défaillant
     if ((agency.tauxKycDefaillant ?? 0) > 70) score -= 20;
     else if ((agency.tauxKycDefaillant ?? 0) > 50) score -= 10;
     return Math.max(0, score);
@@ -568,7 +583,7 @@ function AgencyDetailView({
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-[14px] font-semibold text-primary">
-            Analyse & Actions recommandees
+            Analyse & Actions recommandées
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -577,7 +592,7 @@ function AgencyDetailView({
               <li className="flex items-start gap-2 text-error">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>
-                  Urgent : Reprendre contact avec {formatNumber(agency.stopped)} comptes arretes pour
+                  Urgent : Reprendre contact avec {formatNumber(agency.stopped)} comptes arrêtés pour
                   identifier les obstructions au paiement
                 </span>
               </li>
@@ -586,34 +601,47 @@ function AgencyDetailView({
               <li className="flex items-start gap-2 text-warning">
                 <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>
-                  Critique : Intensifier la verification KYC - {formatTaux(agency.tauxKycDefaillant)}{" "}
-                  de clients non identifies representent un risque reglementaire
+                  Critique : Intensifier la vérification KYC - {formatTaux(agency.tauxKycDefaillant)}{" "}
+                  de clients non identifiés représentent un risque réglementaire
                 </span>
               </li>
             )}
-            {(agency.tauxRecouvrement ?? 100) < 30 && (
+            {agency.tauxRecouvrement !== null && agency.tauxRecouvrement < 30 && (
               <li className="flex items-start gap-2 text-warning">
                 <TrendingDown className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>
                   Taux de recouvrement insuffisant ({formatTaux(agency.tauxRecouvrement)}) -
-                  Renforcer les relances et negocier des echeanciers
+                  Renforcer les relances et négocier des échéanciers
                 </span>
               </li>
             )}
-            {(agency.stopRate ?? 0) <= 30 && (agency.tauxRecouvrement ?? 100) >= 50 && (
+            {agency.tauxRecouvrement !== null &&
+              agency.tauxRecouvrement >= 30 &&
+              agency.tauxRecouvrement < 50 && (
+                <li className="flex items-start gap-2 text-warning">
+                  <TrendingUp className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>
+                    Taux de recouvrement à améliorer ({formatTaux(agency.tauxRecouvrement)}) - Mettre
+                    en place un plan de relance structuré
+                  </span>
+                </li>
+              )}
+            {(agency.stopRate ?? 0) <= 30 && (
+              agency.tauxRecouvrement === null || agency.tauxRecouvrement >= 50
+            ) && (
               <li className="flex items-start gap-2 text-success">
                 <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
                 <span>
                   Agence performante - Maintenir les bonnes pratiques et partager les retours
-                  d'experience
+                  d'expérience
                 </span>
               </li>
             )}
             <li className="flex items-start gap-2 text-on-surface-variant">
               <RefreshCw className="w-4 h-4 mt-0.5 shrink-0" />
               <span>
-                Encours total de {formatXafFull(agency.balance)} a suivre - {formatNumber(agency.accounts)}{" "}
-                comptes confies a {formatNumber(agency.managers)} gestionnaire
+                Encours total de {formatXafFull(agency.balance)} à suivre - {formatNumber(agency.accounts)}{" "}
+                comptes confiés à {formatNumber(agency.managers)} gestionnaire
                 {agency.managers > 1 ? "s" : ""}
               </span>
             </li>
@@ -679,39 +707,63 @@ export function AgencesPage() {
 
   const rows = useMemo<AgencyPerformance[]>(() => {
     return (reportQ.data ?? []).map((row) => {
-      const accounts = numberValue(row, "total_comptes", "nb_comptes");
-      const stopped = numberValue(row, "nb_comptes_arretes", "comptes_arretes");
-      const balance = numberValue(row, "total_dette_balance_fcfa", "total_balance_fcfa");
-      const apiStopRate = row.taux_comptes_arretes_pct;
-      const stopRateFromApi =
-        apiStopRate === null || apiStopRate === undefined ? null : Number(apiStopRate);
-      const computedStopRate =
-        stopRateFromApi !== null && Number.isFinite(stopRateFromApi)
-          ? stopRateFromApi
-          : accounts > 0
-            ? (stopped / accounts) * 100
-            : null;
+      // === Colonnes retournées par le backend reports_agencies_performance ===
+      // - id_agence, nom_agence, region_centre
+      // - total_comptes, nb_gestionnaires, total_dette_balance_fcfa
+      // - nb_comptes_arretes, taux_comptes_arretes_pct
+      // - taux_recouvrement_pct, taux_kyc_defaillant
+      // - total_facture_fcfa, total_impaye_flux_fcfa
+      // - evolution_pct, trend, mois, comparaison_mois
 
+      // Total des comptes gérés (depuis table compte)
+      const accounts = Number(row.total_comptes ?? 0) || 0;
+
+      // Nombre de comptes arrêtés (depuis table compte, statut_facturation='arrêt')
+      const stopped = Number(row.nb_comptes_arretes ?? 0) || 0;
+
+      // Encours total géré (somme des balances)
+      const balance = Number(row.total_dette_balance_fcfa ?? 0) || 0;
+
+      // Taux d'arrêt : calculé par le backend (ROUNDet à 2 décimales)
+      // On garde la valeur backend si elle existe, sinon recalcul
+      const stopRateRaw = row.taux_comptes_arretes_pct;
+      let stopRate: number | null = null;
+      if (stopRateRaw !== undefined && stopRateRaw !== null) {
+        const n = Number(stopRateRaw);
+        if (Number.isFinite(n)) stopRate = n;
+      }
+      if (stopRate === null && accounts > 0) {
+        stopRate = Math.round((stopped / accounts) * 100 * 100) / 100;
+      }
+
+      // Taux de recouvrement : (facturé - impayé) / facturé * 100, NULL si pas de facturation
+      const recRaw = row.taux_recouvrement_pct;
       const tauxRecouvrement =
-        row.taux_recouvrement_pct !== undefined && row.taux_recouvrement_pct !== null
-          ? Number(row.taux_recouvrement_pct)
+        recRaw !== undefined && recRaw !== null && Number.isFinite(Number(recRaw))
+          ? Number(recRaw)
           : null;
+
+      // Taux KYC défaillant : % de comptes non identifiés
+      const kycRaw = row.taux_kyc_defaillant;
       const tauxKycDefaillant =
-        row.taux_kyc_defaillant !== undefined && row.taux_kyc_defaillant !== null
-          ? Number(row.taux_kyc_defaillant)
+        kycRaw !== undefined && kycRaw !== null && Number.isFinite(Number(kycRaw))
+          ? Number(kycRaw)
           : null;
+
+      // Nombre de gestionnaires distincts
+      const managers = Number(row.nb_gestionnaires ?? 0) || 0;
 
       const agencyRow: AgencyPerformance = {
         id: String(row.id_agence ?? ""),
-        name: String(row.nom_agence ?? row.id_agence ?? "Agence non nommee"),
-        centre: String(row.region_centre ?? row.nom_centre ?? "Centre non renseignee"),
-        managers: numberValue(row, "nb_gestionnaires"),
+        name: String(row.nom_agence ?? row.id_agence ?? "Agence non nommée"),
+        centre: String(row.region_centre ?? row.nom_centre ?? "Centre non renseigné"),
+        managers,
         accounts,
         balance,
         stopped,
-        stopRate: computedStopRate,
-        tauxRecouvrement: Number.isFinite(tauxRecouvrement) ? tauxRecouvrement : null,
-        tauxKycDefaillant: Number.isFinite(tauxKycDefaillant) ? tauxKycDefaillant : null,
+        stopRate,
+        tauxRecouvrement,
+        tauxKycDefaillant,
         status: "performant",
       };
       return { ...agencyRow, status: getStatus(agencyRow) };
@@ -734,28 +786,37 @@ export function AgencesPage() {
         return matchesSearch && matchesCentre && matchesFacturation;
       })
       .sort((a, b) => {
-        const statusOrder: Record<AgencyStatus, number> = { critique: 0, attention: 1, performant: 2 };
-        const statusDiff = statusOrder[a.status] - statusOrder[b.status];
-        if (statusDiff !== 0) return statusDiff;
+        // Tri demandé par l'utilisateur en priorité
         const dir = sort.direction === "asc" ? 1 : -1;
+        let primary = 0;
         switch (sort.key) {
           case "name":
-            return dir * a.name.localeCompare(b.name);
+            primary = dir * a.name.localeCompare(b.name);
+            break;
           case "managers":
-            return dir * (a.managers - b.managers);
+            primary = dir * (a.managers - b.managers);
+            break;
           case "accounts":
-            return dir * (a.accounts - b.accounts);
+            primary = dir * (a.accounts - b.accounts);
+            break;
           case "balance":
-            return dir * (a.balance - b.balance);
+            primary = dir * (a.balance - b.balance);
+            break;
           case "stopRate":
-            return dir * ((a.stopRate ?? 0) - (b.stopRate ?? 0));
+            primary = dir * ((a.stopRate ?? 0) - (b.stopRate ?? 0));
+            break;
           case "tauxRecouvrement":
-            return dir * ((a.tauxRecouvrement ?? 0) - (b.tauxRecouvrement ?? 0));
+            primary = dir * ((a.tauxRecouvrement ?? 0) - (b.tauxRecouvrement ?? 0));
+            break;
           case "tauxKyc":
-            return dir * ((a.tauxKycDefaillant ?? 0) - (b.tauxKycDefaillant ?? 0));
+            primary = dir * ((a.tauxKycDefaillant ?? 0) - (b.tauxKycDefaillant ?? 0));
+            break;
           default:
-            return 0;
+            primary = 0;
         }
+        if (primary !== 0) return primary;
+        // Tri secondaire stable par nom d'agence
+        return a.name.localeCompare(b.name);
       });
   }, [rows, search, centre, facturationStatus, sort]);
 
