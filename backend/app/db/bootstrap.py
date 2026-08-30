@@ -94,6 +94,12 @@ ROLE_CODES: tuple[tuple[str, str, str], ...] = (
     ("ADMIN", "Administrateur", "Administration du système et RBAC"),
 )
 
+PERMISSION_CODES: tuple[tuple[str, str, str, str, str], ...] = (
+    ("reports:read", "Lire les rapports", "Consulter les indicateurs et rapports", "reports", "read"),
+    ("organizations:read", "Lire l'organisation", "Consulter centres, agences et gestionnaires", "organizations", "read"),
+    ("organizations:write", "Modifier l'organisation", "Créer ou modifier les référentiels organisationnels", "organizations", "write"),
+)
+
 #: Comptes de démonstration : (email, mot de passe, nom complet, code rôle).
 DEMO_USERS: tuple[tuple[str, str, str, str], ...] = (
     ("agent@camtel.cm", "demo1234", "Diane Mbarga", "AGENT"),
@@ -131,6 +137,25 @@ async def _role_id(conn, code: str) -> UUID:
     if not row:
         raise RuntimeError(f"Rôle '{code}' introuvable après le seed.")
     return _as_uuid(row[0])
+
+
+async def _ensure_permissions(conn) -> None:
+    admin_id = await _role_id(conn, "ADMIN")
+    agent_id = await _role_id(conn, "AGENT")
+    for code, name, description, resource, action in PERMISSION_CODES:
+        row = (await conn.execute(text("SELECT id FROM permissions WHERE code = :c"), {"c": code})).first()
+        permission_id = _as_uuid(row[0]) if row else uuid4()
+        if not row:
+            await conn.execute(
+                text("INSERT INTO permissions (id, code, name, description, resource, action) VALUES (:id, :code, :name, :description, :resource, :action)"),
+                {"id": permission_id, "code": code, "name": name, "description": description, "resource": resource, "action": action},
+            )
+        role_ids = (admin_id, agent_id) if action == "read" else (admin_id,)
+        for role_id in role_ids:
+            await conn.execute(
+                text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :permission_id) ON CONFLICT DO NOTHING"),
+                {"role_id": role_id, "permission_id": permission_id},
+            )
 
 
 async def _ensure_users(conn) -> list[str]:
@@ -198,7 +223,7 @@ def _find_views_sql() -> str | None:
 
 async def _ensure_views(conn) -> None:
     try:
-        res = await conn.execute(text("SELECT 1 FROM pg_views WHERE viewname = 'vw_performance_gestionnaires'"))
+        res = await conn.execute(text("SELECT 1 FROM pg_views WHERE viewname = 'vw_analyse_centres_agences'"))
         if not res.scalar():
             vpath = _find_views_sql()
             if vpath and os.path.isfile(vpath):
@@ -219,6 +244,7 @@ async def bootstrap_db(engine) -> list[str]:
     async with engine.begin() as conn:
         await _apply_ddl(conn)
         await _ensure_roles(conn)
+        await _ensure_permissions(conn)
         await _ensure_views(conn)
         credentials = await _ensure_users(conn)
     return credentials

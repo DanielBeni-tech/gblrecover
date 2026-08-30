@@ -87,7 +87,7 @@ function perfStatus(taux: number): {
 }
 
 /** Mini sparkline SVG inline (6 points = 6 mois). */
-function Sparkline({ values, positive }: { values: number[]; positive: boolean }) {
+function MiniSparkline({ values, positive }: { values: number[]; positive: boolean }) {
   if (!values || values.length < 2)
     return <span className="text-[11px] text-on-surface-variant">—</span>;
 
@@ -869,7 +869,7 @@ export function GestionnairesPage() {
                           </TableCell>
                           {/* Évolution */}
                           <TableCell className="min-w-[110px]">
-                            <Sparkline
+                            <MiniSparkline
                               values={row.evolution}
                               positive={trend >= 0}
                             />

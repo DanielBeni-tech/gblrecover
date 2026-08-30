@@ -47,9 +47,9 @@ export function ReferentielsPage() {
   const [managerSort, setManagerSort] = useState<{ key: string; dir: SortDir }>({ key: "nom_gestionnaire", dir: "asc" });
 
   // Requêtes API
-  const centresQ = useQuery({ queryKey: ["centres"], queryFn: () => listCentres({ pageSize: 200 }) });
-  const agenciesQ = useQuery({ queryKey: ["agencies"], queryFn: () => listAgencies({ pageSize: 200 }) });
-  const managersQ = useQuery({ queryKey: ["managers-api"], queryFn: () => listManagers({ pageSize: 200 }) });
+  const centresQ = useQuery({ queryKey: ["centres"], queryFn: () => listCentres({ pageSize: 1000 }) });
+  const agenciesQ = useQuery({ queryKey: ["agencies"], queryFn: () => listAgencies({ pageSize: 1000 }) });
+  const managersQ = useQuery({ queryKey: ["managers-api"], queryFn: () => listManagers({ pageSize: 1000 }) });
   const clientsQ = useQuery({
     queryKey: ["clients-total-count"],
     queryFn: () => listClientsAggregated({}, 1, 1),
@@ -58,8 +58,8 @@ export function ReferentielsPage() {
   const centresAgencesQ = useQuery({ queryKey: ["report", "centres-agences"], queryFn: getCentresAgencesReport });
   const gestionnairesReportQ = useQuery({ queryKey: ["report", "gestionnaires"], queryFn: getGestionnairesReport });
 
-  const isLoading = centresQ.isLoading || agenciesQ.isLoading || managersQ.isLoading;
-  const hasError = centresQ.isError || agenciesQ.isError || managersQ.isError;
+  const isLoading = centresQ.isLoading || agenciesQ.isLoading || managersQ.isLoading || centresAgencesQ.isLoading || gestionnairesReportQ.isLoading;
+  const hasError = centresQ.isError || agenciesQ.isError || managersQ.isError || centresAgencesQ.isError || gestionnairesReportQ.isError;
 
   // Données brutes
   const centresRaw = centresQ.data ?? [];
@@ -69,13 +69,15 @@ export function ReferentielsPage() {
 
   // Map des centres et agences depuis le rapport
   const centreStatsMap = useMemo(() => {
-    const map = new Map<string, { agences: number; clients: number; comptes: number }>();
+    const map = new Map<string, { agences: Set<string>; clients: number; comptes: number }>();
     for (const row of centresAgencesQ.data ?? []) {
-      const centre = String(row.nom_centre ?? row.centre ?? row.code ?? "");
-      const agences = Number(row.agences ?? row.nb_agences ?? row.total_agences ?? 0);
-      const clients = Number(row.clients ?? row.nb_clients ?? row.total_clients ?? 0);
-      const comptes = Number(row.comptes ?? row.nb_comptes ?? row.total_comptes ?? 0);
-      if (centre) map.set(centre, { agences, clients, comptes });
+      const centre = String(row.nom_centre ?? row.region_centre ?? row.centre ?? row.code ?? "");
+      if (!centre) continue;
+      const current = map.get(centre) ?? { agences: new Set<string>(), clients: 0, comptes: 0 };
+      current.agences.add(String(row.id_agence ?? row.nom_agence ?? ""));
+      current.clients += Number(row.clients ?? row.nb_clients ?? row.total_clients ?? 0);
+      current.comptes += Number(row.comptes ?? row.nb_comptes ?? row.total_comptes ?? 0);
+      map.set(centre, current);
     }
     return map;
   }, [centresAgencesQ.data]);
@@ -87,7 +89,7 @@ export function ReferentielsPage() {
       const id = String(row.mat_gestionnaire ?? row.id_gestionnaire ?? "");
       const agence = String(row.nom_agence ?? row.agence ?? row.id_agence ?? "");
       const centre = String(row.nom_centre ?? row.centre ?? "");
-      const dossiers = Number(row.dossiers ?? row.workload ?? row.nb_clients ?? row.nb_comptes ?? 0);
+      const dossiers = Number(row.dossiers ?? row.workload ?? row.volume_comptes ?? row.nb_clients ?? row.nb_comptes ?? 0);
       const encours = Number(row.total_impaye ?? row.total_balance ?? row.encours ?? 0);
       if (id) map.set(id, { agence, centre, dossiers, encours });
     }
@@ -116,7 +118,7 @@ export function ReferentielsPage() {
     for (const data of gestionnaireDataMap.values()) {
       sum += data.dossiers;
     }
-    return sum > 0 ? sum : 50606;
+    return sum;
   }, [gestionnaireDataMap]);
 
   // Helper de tri
@@ -141,8 +143,8 @@ export function ReferentielsPage() {
       let valA: string | number = a.nom_centre;
       let valB: string | number = b.nom_centre;
       if (centreSort.key === "agences") {
-        valA = statsA?.agences ?? 0;
-        valB = statsB?.agences ?? 0;
+        valA = statsA?.agences.size ?? 0;
+        valB = statsB?.agences.size ?? 0;
       } else if (centreSort.key === "clients") {
         valA = statsA?.clients ?? 0;
         valB = statsB?.clients ?? 0;
@@ -380,7 +382,7 @@ export function ReferentielsPage() {
                         }`}
                       >
                         <TableCell className="font-semibold">{c.nom_centre}</TableCell>
-                        <TableCell className="text-right font-medium">{stats?.agences ?? "—"}</TableCell>
+                        <TableCell className="text-right font-medium">{stats?.agences.size ?? "—"}</TableCell>
                         <TableCell className="text-right font-medium">{stats?.clients ? stats.clients.toLocaleString("fr-FR") : "—"}</TableCell>
                         <TableCell className="text-right font-medium">{stats?.comptes ? stats.comptes.toLocaleString("fr-FR") : "—"}</TableCell>
                       </TableRow>

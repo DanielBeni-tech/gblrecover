@@ -706,6 +706,10 @@ export function getCentresAgencesReport(): Promise<ReportRow[]> {
   return apiRequest<ReportRow[]>("/reports/centres-agences");
 }
 
+export function getAgenciesPerformanceReport(filters?: { centre?: string; mois?: string; comparaison_mois?: string }): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/reports/agencies-performance", { query: qs(filters ?? {}) });
+}
+
 export function getGestionnairesReport(): Promise<ReportRow[]> {
   return apiRequest<ReportRow[]>("/reports/gestionnaires");
 }

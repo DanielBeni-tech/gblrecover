@@ -64,7 +64,20 @@ async def reports_centres_agences(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_centres_agences(db)
+
+
+@router.get("/reports/agencies-performance", response_model=List[schemas.ReportRow])
+async def reports_agencies_performance(
+    centre: str | None = Query(None),
+    mois: str | None = Query(None, description="Mois sélectionné au format YYYY-MM"),
+    comparaison_mois: str | None = Query(None, description="Mois de comparaison au format YYYY-MM"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    await crud.require_permission(db, current_user.id, "reports:read")
+    return await crud.reports_agencies_performance(db, centre=centre, mois=mois, comparaison_mois=comparaison_mois)
 
 
 @router.get("/reports/gestionnaires", response_model=List[schemas.ReportRow])
@@ -72,6 +85,7 @@ async def reports_gestionnaires(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_gestionnaires(db)
 
 
@@ -81,6 +95,7 @@ async def reports_gestionnaire(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_gestionnaire(db, manager_id)
 
 
@@ -89,6 +104,7 @@ async def reports_marches(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_marches(db)
 
 
@@ -97,6 +113,7 @@ async def reports_evolution_mensuelle(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_evolution_mensuelle(db)
 
 
@@ -105,6 +122,7 @@ async def reports_top_dette(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_top_dette(db)
 
 
@@ -113,6 +131,7 @@ async def reports_fragilite(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_fragilite(db)
 
 
@@ -121,6 +140,7 @@ async def reports_spirale_negative(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_spirale_negative(db)
 
 
@@ -129,6 +149,7 @@ async def reports_zombies(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    await crud.require_permission(db, current_user.id, "reports:read")
     return await crud.reports_zombies(db)
 
 

@@ -127,6 +127,11 @@ async def get_user_permissions(db: AsyncSession, user_id: UUID) -> list[str]:
     return [row[0] for row in result.all()]
 
 
+async def require_permission(db: AsyncSession, user_id: UUID, permission: str) -> None:
+    if permission not in await get_user_permissions(db, user_id):
+        raise HTTPException(status_code=403, detail="Permission insuffisante")
+
+
 # ============================================================
 # Organisations
 # ============================================================
@@ -163,7 +168,7 @@ async def update_centre(db: AsyncSession, centre_id: str, centre_in):
 
 
 async def get_agencies(db: AsyncSession, centre_id: str | None = None, page: int = 1, page_size: int = 25):
-    stmt = select(Agence)
+    stmt = select(Agence).order_by(Agence.nom_agence, Agence.id_agence)
     if centre_id:
         stmt = stmt.where(Agence.nom_centre == centre_id)
     stmt = stmt.limit(page_size).offset((page - 1) * page_size)
@@ -199,7 +204,7 @@ async def update_agency(db: AsyncSession, agency_id: str, agency_in):
 async def get_managers(db: AsyncSession, agency_id: str | None = None, status: str | None = None, page: int = 1, page_size: int = 25):
     stmt = select(Gestionnaire)
     if agency_id:
-        stmt = stmt.where(Gestionnaire.mat_gestionnaire == agency_id)
+        stmt = stmt.join(Compte, Compte.mat_gestionnaire == Gestionnaire.mat_gestionnaire).where(Compte.id_agence == agency_id).distinct()
     stmt = stmt.limit(page_size).offset((page - 1) * page_size)
     result = await db.execute(stmt)
     return result.scalars().all()
@@ -1100,6 +1105,115 @@ async def dashboard_activity(db):
 
 async def reports_centres_agences(db):
     result = await db.execute(text("SELECT * FROM vw_analyse_centres_agences ORDER BY total_dette_balance_fcfa DESC"))
+    return result.mappings().all()
+
+async def reports_agencies_performance(db, centre: str | None = None, mois: str | None = None, comparaison_mois: str | None = None):
+    """Retourne une ligne de performance par agence pour deux périodes comparables.
+    
+    Métriques calculées sur les vraies données GBL :
+    - Comptes gérés, Gestionnaires, Encours : TOUS les comptes de l'agence (table compte)
+    - Taux d'Arrêt : (comptes arrêtés / total comptes) depuis la table compte
+    - Taux de Recouvrement : facturé - impayé du mois sélectionné (table facture)
+    - Taux KYC Défaillant : comptes non identifiés / total comptes (table compte)
+    """
+    params: dict[str, str | None] = {}
+    centre_filter = "AND a.nom_centre = :centre" if centre else ""
+    if centre:
+        params["centre"] = centre
+    month_sql = "COALESCE(NULLIF(:mois, ''), (SELECT TO_CHAR(MAX(date_emission), 'YYYY-MM') FROM facture))"
+    comparison_sql = "COALESCE(NULLIF(:comparaison_mois, ''), TO_CHAR((TO_DATE(" + month_sql + " || '-01', 'YYYY-MM-DD') - INTERVAL '1 month'), 'YYYY-MM'))"
+    params["mois"] = mois
+    params["comparaison_mois"] = comparaison_mois
+    query = text(f"""
+        WITH selected_month AS (
+            SELECT {month_sql} AS value
+        ), comparison_month AS (
+            SELECT {comparison_sql} AS value
+        ),
+        -- agency_base_stats : métriques de base depuis la TABLE COMPTE (tous les comptes, sans filtrage par période)
+        agency_base_stats AS (
+            SELECT
+                a.id_agence,
+                a.nom_agence,
+                a.nom_centre,
+                COUNT(DISTINCT cp.num_compte) AS total_comptes,
+                COUNT(DISTINCT cp.mat_gestionnaire) FILTER (WHERE cp.mat_gestionnaire IS NOT NULL AND TRIM(cp.mat_gestionnaire) <> '') AS nb_gestionnaires,
+                COUNT(DISTINCT cp.code_client) AS nb_clients,
+                COALESCE(SUM(cp.balance), 0) AS total_balance,
+                -- Comptes arrêtés : depuis la table compte (statut_facturation)
+                COUNT(DISTINCT cp.num_compte) FILTER (WHERE LOWER(TRIM(cp.statut_facturation)) = 'arrêt') AS nb_comptes_arretes,
+                -- Taux d'arrêt : comptes arrêtés / total comptes
+                CASE
+                    WHEN COUNT(DISTINCT cp.num_compte) = 0 THEN 0
+                    ELSE ROUND((COUNT(DISTINCT cp.num_compte) FILTER (WHERE LOWER(TRIM(cp.statut_facturation)) = 'arrêt') * 100.0 / COUNT(DISTINCT cp.num_compte))::numeric, 2)
+                END AS taux_comptes_arretes_pct
+            FROM agence a
+            LEFT JOIN compte cp ON cp.id_agence = a.id_agence
+            WHERE 1=1 {centre_filter}
+            GROUP BY a.id_agence, a.nom_agence, a.nom_centre
+        ),
+        -- agency_kyc : calcul du taux KYC défaillant depuis la table compte
+        agency_kyc AS (
+            SELECT
+                cp.id_agence,
+                COUNT(DISTINCT cp.num_compte) AS total_accounts_kyc,
+                COUNT(DISTINCT CASE WHEN LOWER(TRIM(COALESCE(cp.identification, ''))) LIKE '%non identifi%' THEN cp.num_compte END) AS non_identified,
+                CASE
+                    WHEN COUNT(DISTINCT cp.num_compte) = 0 THEN 0
+                    ELSE ROUND((COUNT(DISTINCT CASE WHEN LOWER(TRIM(COALESCE(cp.identification, ''))) LIKE '%non identifi%' THEN cp.num_compte END) * 100.0 / COUNT(DISTINCT cp.num_compte))::numeric, 2)
+                END AS taux_kyc_defaillant
+            FROM compte cp
+            GROUP BY cp.id_agence
+        ),
+        -- period_stats : statistiques mensuelles (facturé, impayé) pour le taux de recouvrement
+        period_stats AS (
+            SELECT
+                cp.id_agence,
+                TO_CHAR(f.date_emission, 'YYYY-MM') AS period,
+                COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'FACTURE'), 0) AS billed,
+                COALESCE(SUM(f.montant_facture) FILTER (WHERE f.type_flux = 'IMPAYE'), 0) AS outstanding
+            FROM compte cp
+            JOIN facture f ON f.num_compte = cp.num_compte
+            WHERE f.status <> 'CANCELLED'
+            GROUP BY cp.id_agence, TO_CHAR(f.date_emission, 'YYYY-MM')
+        ),
+        agency_trends AS (
+            SELECT id_agence, JSON_AGG(JSON_BUILD_OBJECT('period', period, 'outstanding', outstanding) ORDER BY period) AS trend
+            FROM period_stats GROUP BY id_agence
+        )
+        SELECT
+            s.id_agence,
+            s.nom_agence,
+            s.nom_centre AS region_centre,
+            s.nb_clients AS total_clients,
+            s.total_comptes AS total_comptes,
+            s.nb_gestionnaires AS nb_gestionnaires,
+            s.total_balance AS total_dette_balance_fcfa,
+            s.nb_comptes_arretes AS nb_comptes_arretes,
+            s.taux_comptes_arretes_pct AS taux_comptes_arretes_pct,
+            COALESCE(cur.billed, 0) AS total_facture_fcfa,
+            COALESCE(cur.outstanding, 0) AS total_impaye_flux_fcfa,
+            -- Taux de Recouvrement M-1 : (facturé - impayé) / facturé * 100
+            CASE WHEN COALESCE(cur.billed, 0) = 0 THEN NULL
+                 ELSE ROUND(((cur.billed - COALESCE(cur.outstanding, 0)) * 100.0 / cur.billed)::numeric, 2)
+            END AS taux_recouvrement_pct,
+            -- Taux KYC Défaillant
+            COALESCE(k.taux_kyc_defaillant, 0) AS taux_kyc_defaillant,
+            (SELECT value FROM selected_month) AS mois,
+            (SELECT value FROM comparison_month) AS comparaison_mois,
+            COALESCE(t.trend, '[]'::json) AS trend,
+            -- Évolution : (outstanding_courant - outstanding_précédent) / outstanding_précédent * 100
+            CASE WHEN COALESCE(prev.outstanding, 0) = 0 THEN NULL
+                 ELSE ROUND(((COALESCE(cur.outstanding, 0) - prev.outstanding) * 100.0 / prev.outstanding)::numeric, 2)
+            END AS evolution_pct
+        FROM agency_base_stats s
+        LEFT JOIN agency_kyc k ON k.id_agence = s.id_agence
+        LEFT JOIN period_stats cur ON cur.id_agence = s.id_agence AND cur.period = (SELECT value FROM selected_month)
+        LEFT JOIN period_stats prev ON prev.id_agence = s.id_agence AND prev.period = (SELECT value FROM comparison_month)
+        LEFT JOIN agency_trends t ON t.id_agence = s.id_agence
+        ORDER BY s.total_balance DESC
+    """)
+    result = await db.execute(query, params)
     return result.mappings().all()
 
 
