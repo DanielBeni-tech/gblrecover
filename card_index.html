@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GBLRecover - Équipe CAMTEL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ============================================
+           RESET & BASE STYLES
+           ============================================ */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --card-width: 130px;
+            --card-height: 180px;
+            --radius: 8px;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ============================================
+           MAIN LAYOUT
+           ============================================ */
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* ============================================
+           LEFT PANEL - CAMTEL TEAL
+           ============================================ */
+        .panel-left {
+            flex: 1;
+            background: linear-gradient(165deg, #00695c 0%, #004d40 100%);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel-left::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255,255,255,0.03) 0%, transparent 40%);
+            pointer-events: none;
+        }
+
+        .brand {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 40px;
+        }
+
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo-icon svg {
+            width: 26px;
+            height: 26px;
+            color: #a7f3d0;
+        }
+
+        .brand-name {
+            font-size: 22px;
+            font-weight: 700;
+            color: white;
+            letter-spacing: -0.5px;
+        }
+
+        .brand-tagline {
+            font-size: 13px;
+            color: rgba(255,255,255,0.7);
+            font-weight: 400;
+        }
+
+        /* ============================================
+           TEAM SECTION
+           ============================================ */
+        .team-section {
+            position: relative;
+            z-index: 1;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.5);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 36px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.2), transparent);
+        }
+
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 28px 20px;
+            max-width: 540px;
+        }
+
+        /* ============================================
+           TEAM MEMBER CARD - SQUARE BOOK/POSTER STYLE
+           ============================================ */
+        .card {
+            width: var(--card-width);
+            height: var(--card-height);
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding: 0;
+            perspective: 1000px;
+            cursor: pointer;
+        }
+
+        /* Bottom info plate (like the book cover) */
+        .card .info-plate {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 10px 8px;
+            background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.85) 100%);
+            border-radius: var(--radius);
+            z-index: 5;
+            text-align: center;
+            transition: all 0.4s ease;
+        }
+
+        .card .info-plate .member-name {
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            line-height: 1.2;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+        }
+
+        .card .info-plate .member-role {
+            font-size: 8.5px;
+            color: rgba(255,255,255,0.8);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-top: 3px;
+            font-weight: 500;
+        }
+
+        /* Glow / shine behind the card */
+        .card::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 50%, #34d399 100%);
+            border-radius: var(--radius);
+            opacity: 0;
+            z-index: 0;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: blur(15px);
+        }
+
+        .card:hover::before {
+            opacity: 0.7;
+        }
+
+        /* Image wrapper - SQUARE like the book cover */
+        .cover {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            border-radius: var(--radius);
+            overflow: visible;
+            z-index: 2;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .card:hover .cover {
+            transform: translateY(-12px) scale(1.05);
+            box-shadow: 
+                0 20px 40px rgba(0,0,0,0.5),
+                0 0 0 2px #a7f3d0,
+                0 0 30px rgba(167, 243, 208, 0.4);
+        }
+
+        /* The actual photo */
+        .member-photo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+            border-radius: var(--radius);
+            display: block;
+            transition: filter 0.5s ease;
+        }
+
+        .card:hover .member-photo {
+            filter: brightness(1.1) contrast(1.05);
+        }
+
+        /* ============================================
+           RIGHT PANEL - LIGHT BACKGROUND
+           ============================================ */
+        .panel-right {
+            flex: 1.2;
+            background: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            position: relative;
+        }
+
+        .panel-right::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(circle at 0% 0%, rgba(0,105,92,0.03) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(0,105,92,0.02) 0%, transparent 40%);
+            pointer-events: none;
+        }
+
+        .welcome-content {
+            text-align: center;
+            position: relative;
+            z-index: 1;
+            max-width: 400px;
+        }
+
+        .welcome-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #00695c, #004d40);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            box-shadow: 0 8px 32px rgba(0,105,92,0.2);
+        }
+
+        .welcome-icon svg {
+            width: 40px;
+            height: 40px;
+            color: white;
+        }
+
+        .welcome-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        .welcome-text {
+            font-size: 15px;
+            color: #64748b;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .welcome-features {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            text-align: left;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+
+        .feature-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #00695c 0%, #00897b 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .feature-icon svg {
+            width: 18px;
+            height: 18px;
+            color: white;
+        }
+
+        .feature-text {
+            font-size: 13px;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        /* ============================================
+           RESPONSIVE - MOBILE CAROUSEL
+           ============================================ */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .panel-left {
+                padding: 30px 20px;
+                min-height: auto;
+            }
+
+            .brand {
+                margin-bottom: 24px;
+                text-align: center;
+            }
+
+            .brand-logo {
+                justify-content: center;
+            }
+
+            .section-title {
+                justify-content: center;
+                font-size: 11px;
+                margin-bottom: 24px;
+            }
+
+            .section-title::after {
+                display: none;
+            }
+
+            /* Horizontal Carousel */
+            .team-grid {
+                display: flex;
+                flex-direction: row;
+                overflow-x: auto;
+                gap: 24px;
+                padding: 10px 5px 20px;
+                margin: 0 -5px;
+                scroll-snap-type: x mandatory;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+                max-width: 100%;
+            }
+
+            .team-grid::-webkit-scrollbar {
+                display: none;
+            }
+
+            .card {
+                flex: 0 0 auto;
+                scroll-snap-align: center;
+            }
+
+            .panel-right {
+                padding: 30px 20px;
+                min-height: 400px;
+            }
+
+            .welcome-title {
+                font-size: 22px;
+            }
+
+            .welcome-text {
+                font-size: 14px;
+            }
+        }
+
+        /* ============================================
+           ANIMATIONS
+           ============================================ */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .card {
+            animation: fadeInUp 0.5s ease-out backwards;
+        }
+
+        .card:nth-child(1) { animation-delay: 0.1s; }
+        .card:nth-child(2) { animation-delay: 0.2s; }
+        .card:nth-child(3) { animation-delay: 0.3s; }
+        .card:nth-child(4) { animation-delay: 0.4s; }
+        .card:nth-child(5) { animation-delay: 0.5s; }
+        .card:nth-child(6) { animation-delay: 0.6s; }
+
+        .carousel-hint {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .carousel-hint {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 8px;
+                margin-top: 16px;
+                color: rgba(255,255,255,0.4);
+                font-size: 11px;
+            }
+
+            .carousel-hint svg {
+                width: 14px;
+                height: 14px;
+                animation: swipeHint 1.5s ease-in-out infinite;
+            }
+
+            @keyframes swipeHint {
+                0%, 100% { transform: translateX(0); }
+                50% { transform: translateX(6px); }
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- ==========================================
+             LEFT PANEL - TEAM SECTION
+             ========================================== -->
+        <div class="panel-left">
+            <div class="brand">
+                <div class="brand-logo">
+                    <div class="logo-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <span class="brand-name">GBLRecover</span>
+                </div>
+                <p class="brand-tagline">CAMTEL Revenue Assurance</p>
+            </div>
+
+            <div class="team-section">
+                <h2 class="section-title">Équipe de Développement</h2>
+
+                <div class="team-grid">
+                    <!-- Membre 1: BALAWE N. -->
+                    <div class="card">
+                        <div class="cover">
+                            <img
+                                src="assets/images/team/balawe.png"
+                                alt="BALAWE N."
+                                class="member-photo"
+                                onerror="this.style.display='none'"
+                            >
+                        </div>
+                        <div class="info-plate">
+                            <div class="member-name">BALAWE N.</div>
+                            <div class="member-role">Développeur</div>
+                        </div>
+                    </div>
+
+                    <!-- Membre 2: SOUNDJOCK M. -->
+                    <div class="card">
+                        <div class="cover">
+                            <img
+                                src="assets/images/team/soundjock.png"
+                                alt="SOUNDJOCK M."
+                                class="member-photo"
+                                onerror="this.style.display='none'"
+                            >
+                        </div>
+                        <div class="info-plate">
+                            <div class="member-name">SOUNDJOCK M.</div>
+                            <div class="member-role">Développeur</div>
+                        </div>
+                    </div>
+
+                    <!-- Membre 3: DJOUKOUO A. -->
+                    <div class="card">
+                        <div class="cover">
+                            <img
+                                src="assets/images/team/djoukouo.png"
+                                alt="DJOUNKOUO A."
+                                class="member-photo"
+                                onerror="this.style.display='none'"
+                            >
+                        </div>
+                        <div class="info-plate">
+                            <div class="member-name">DJOUNKOUO A.</div>
+                            <div class="member-role">Développeur</div>
+                        </div>
+                    </div>
+
+                    <!-- Membre 4: DANIEL B. -->
+                    <div class="card">
+                        <div class="cover">
+                            <img
+                                src="assets/images/team/daniel.png"
+                                alt="DANIEL B."
+                                class="member-photo"
+                                onerror="this.style.display='none'"
+                            >
+                        </div>
+                        <div class="info-plate">
+                            <div class="member-name">DANIEL B.</div>
+                            <div class="member-role">Développeur</div>
+                        </div>
+                    </div>
+
+                    <!-- Membre 5: NKOUMOU G. -->
+                    <div class="card">
+                        <div class="cover">
+                            <img
+                                src="assets/images/team/nkoumou.png"
+                                alt="NKOUMOU G."
+                                class="member-photo"
+                                onerror="this.style.display='none'"
+                            >
+                        </div>
+                        <div class="info-plate">
+                            <div class="member-name">NKOUMOU G.</div>
+                            <div class="member-role">Développeur</div>
+                        </div>
+                    </div>
+
+                    <!-- Membre 6: EVINA M. -->
+                    <div class="card">
+                        <div class="cover">
+                            <img
+                                src="assets/images/team/evina.png"
+                                alt="EVINA M."
+                                class="member-photo"
+                                onerror="this.style.display='none'"
+                            >
+                        </div>
+                        <div class="info-plate">
+                            <div class="member-name">EVINA M.</div>
+                            <div class="member-role">Développeur</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="carousel-hint">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14"/>
+                        <path d="m12 5 7 7-7 7"/>
+                    </svg>
+                    <span>Balayez pour voir</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             RIGHT PANEL - WELCOME CONTENT
+             ========================================== -->
+        <div class="panel-right">
+            <div class="welcome-content">
+                <div class="welcome-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="m9 12 2 2 4-4"/>
+                    </svg>
+                </div>
+                <h1 class="welcome-title">Bienvenue sur GBLRecover</h1>
+                <p class="welcome-text">
+                    Plateforme de pilotage et de recouvrement des créances CAMTEL.
+                    Suivez, analysez et optimisez vos performances de recouvrement.
+                </p>
+
+                <div class="welcome-features">
+                    <div class="feature-item">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 3v18h18"/>
+                                <path d="m19 9-5 5-4-4-3 3"/>
+                            </svg>
+                        </div>
+                        <span class="feature-text">Tableaux de bord en temps réel</span>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                        </div>
+                        <span class="feature-text">Gestion des agences et centres</span>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 20h9"/>
+                                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                            </svg>
+                        </div>
+                        <span class="feature-text">Suivi personnalisé des recouvrances</span>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <polyline points="10 9 9 9 8 9"/>
+                            </svg>
+                        </div>
+                        <span class="feature-text">Rapports et analyses détaillés</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

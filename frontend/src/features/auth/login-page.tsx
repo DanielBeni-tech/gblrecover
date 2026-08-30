@@ -4,6 +4,7 @@ import { Activity, CheckCircle2, Eye, EyeOff, Lock, ShieldCheck, User } from "lu
 import { clearStoredSession, getStoredSession, login, setStoredSession } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { TeamSection } from "./team-section";
 
 const bullets = [
   "Vue client 360° — comptes, factures, paiements, créances",
@@ -70,38 +71,37 @@ export function LoginPage() {
 
   return (
     <div className="flex h-full">
-      {/* Panneau de marque */}
-      <div className="hidden w-[44%] flex-col justify-between bg-primary p-10 text-on-primary lg:flex">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-container">
-            <Activity className="h-6 w-6 text-on-primary-container" />
-          </div>
-          <div>
-            <p className="text-[20px] font-bold leading-6">GBLRecover</p>
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-on-primary-container">Revenue Assurance</p>
-          </div>
+      {/* Panneau Équipe CAMTEL */}
+      <div className="hidden w-[44%] flex-col justify-center bg-primary p-10 text-on-primary lg:flex overflow-hidden relative">
+        {/* Decorative pattern */}
+        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
+          backgroundImage: 'radial-gradient(circle at 20% 80%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)',
+          backgroundSize: '60px 60px'
+        }} />
+        <div className="relative z-10">
+          <TeamSection />
         </div>
-        <div className="max-w-md">
-          <h1 className="text-[36px] font-bold leading-[44px] tracking-[-0.02em]">
+        <div className="relative z-10 max-w-md mt-auto pt-10">
+          <h2 className="text-[24px] font-bold leading-[30px] tracking-[-0.02em]">
             Voir juste.
             <br />
             Comprendre vite.
             <br />
             Agir avec confiance.
-          </h1>
-          <p className="mt-4 text-[15px] text-on-primary-container">
+          </h2>
+          <p className="mt-3 text-[14px] text-on-primary-container">
             La source de vérité opérationnelle de CAMTEL pour piloter la dette client et le recouvrement.
           </p>
-          <ul className="mt-8 space-y-3">
+          <ul className="mt-6 space-y-2.5">
             {bullets.map((b) => (
-              <li key={b} className="flex items-start gap-2.5 text-[14px]">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-secondary-container" />
+              <li key={b} className="flex items-start gap-2.5 text-[13px]">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-secondary-container" />
                 {b}
               </li>
             ))}
           </ul>
+          <p className="text-[11px] text-on-primary-container mt-8">© 2026 CAMTEL — Accès réservé aux équipes autorisées</p>
         </div>
-        <p className="text-[12px] text-on-primary-container">© 2026 CAMTEL — Accès réservé aux équipes autorisées</p>
       </div>
 
       {/* Formulaire */}
