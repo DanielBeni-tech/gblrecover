@@ -172,6 +172,28 @@ class AccountRead(BaseModel):
         from_attributes = True
 
 
+class DetailedAccountRead(BaseModel):
+    num_compte: int
+    code_client: int
+    raison_sociale: Optional[str] = None
+    marche: Optional[str] = None
+    id_agence: Optional[str] = None
+    nom_agence: Optional[str] = None
+    nom_centre: Optional[str] = None
+    mat_gestionnaire: Optional[str] = None
+    nom_gestionnaire: Optional[str] = None
+    statut_facturation: Optional[str] = None
+    identification: Optional[str] = None
+    e_bill: Optional[str] = None
+    balance: float = 0.0
+
+
+class DetailedAccountListResponse(BaseModel):
+    total: int
+    items: List[DetailedAccountRead]
+
+
+
 class ClientRead(ClientBase):
     comptes: Optional[List[AccountRead]] = None
 

@@ -1141,6 +1141,41 @@ export async function listClientMarkets(): Promise<string[]> {
   return res.items ?? [];
 }
 
+export interface DetailedAccountRow {
+  num_compte: number;
+  code_client: number;
+  raison_sociale: string | null;
+  marche: string | null;
+  id_agence: string | null;
+  nom_agence: string | null;
+  nom_centre: string | null;
+  mat_gestionnaire: string | null;
+  nom_gestionnaire: string | null;
+  statut_facturation: string | null;
+  identification: string | null;
+  e_bill: string | null;
+  balance: number;
+}
+
+export async function listAccountsDetailed(
+  filters: { query?: string; agency?: string; center?: string; statut_facturation?: string; code_client?: number },
+  page: number = 1,
+  pageSize: number = 50,
+): Promise<{ total: number; items: DetailedAccountRow[] }> {
+  return apiRequest<{ total: number; items: DetailedAccountRow[] }>("/accounts/list", {
+    query: qs({
+      q: filters.query,
+      centre: filters.center,
+      agence: filters.agency,
+      statut_facturation: filters.statut_facturation,
+      code_client: filters.code_client,
+      page,
+      page_size: pageSize,
+    }),
+  });
+}
+
+
 // ============================================================
 // Dashboard (vue agrégée consommée par la page Dashboard)
 // ============================================================

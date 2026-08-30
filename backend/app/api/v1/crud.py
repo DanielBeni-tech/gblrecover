@@ -505,6 +505,98 @@ async def get_accounts(db: AsyncSession, client_id: int | None = None, agency_id
     return result.scalars().all()
 
 
+def _accounts_list_where(
+    q: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    statut_facturation: str | None = None,
+    code_client: int | None = None,
+) -> tuple[str, dict]:
+    params: dict = {}
+    where_clauses = ["1=1"]
+
+    if q:
+        where_clauses.append("(cl.raison_sociale ILIKE :q OR CAST(cp.num_compte AS TEXT) ILIKE :q OR CAST(cp.code_client AS TEXT) ILIKE :q)")
+        params["q"] = f"%{q}%"
+    if centre:
+        where_clauses.append("a.nom_centre = :centre")
+        params["centre"] = centre
+    if agence:
+        where_clauses.append("cp.id_agence = :agence")
+        params["agence"] = agence
+    if statut_facturation:
+        where_clauses.append("cp.statut_facturation ILIKE :statut_facturation")
+        params["statut_facturation"] = statut_facturation
+    if code_client is not None:
+        where_clauses.append("cp.code_client = :code_client")
+        params["code_client"] = code_client
+
+    return " AND ".join(where_clauses), params
+
+
+async def count_accounts_list(
+    db: AsyncSession,
+    q: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    statut_facturation: str | None = None,
+    code_client: int | None = None,
+) -> int:
+    where_sql, params = _accounts_list_where(q=q, centre=centre, agence=agence, statut_facturation=statut_facturation, code_client=code_client)
+    sql = f"""
+    SELECT COUNT(*) AS total
+    FROM compte cp
+    JOIN client cl ON cp.code_client = cl.code_client
+    LEFT JOIN agence a ON cp.id_agence = a.id_agence
+    WHERE {where_sql}
+    """
+    result = await db.execute(text(sql), params)
+    row = result.mappings().first()
+    return int(row["total"]) if row else 0
+
+
+async def get_accounts_list(
+    db: AsyncSession,
+    q: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    statut_facturation: str | None = None,
+    code_client: int | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    where_sql, params = _accounts_list_where(q=q, centre=centre, agence=agence, statut_facturation=statut_facturation, code_client=code_client)
+    sql = f"""
+    SELECT 
+        cp.num_compte,
+        cp.code_client,
+        cl.raison_sociale,
+        cl.marche,
+        cp.id_agence,
+        a.nom_agence,
+        a.nom_centre,
+        cp.mat_gestionnaire,
+        g.nom_gestionnaire,
+        cp.statut_facturation,
+        cp.identification,
+        cp.e_bill,
+        COALESCE(cp.balance, 0) AS balance
+    FROM compte cp
+    JOIN client cl ON cp.code_client = cl.code_client
+    LEFT JOIN agence a ON cp.id_agence = a.id_agence
+    LEFT JOIN gestionnaire g ON cp.mat_gestionnaire = g.mat_gestionnaire
+    WHERE {where_sql}
+    ORDER BY cp.balance DESC, cp.num_compte
+    LIMIT :limit OFFSET :offset
+    """
+    params["limit"] = page_size
+    params["offset"] = (page - 1) * page_size
+
+    result = await db.execute(text(sql), params)
+    return result.mappings().all()
+
+
+
 async def get_account(db: AsyncSession, account_id: int):
     result = await db.execute(select(Compte).where(Compte.num_compte == account_id))
     return result.scalars().first()

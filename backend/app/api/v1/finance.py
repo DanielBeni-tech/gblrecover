@@ -34,7 +34,41 @@ async def read_accounts(
     )
 
 
+@router.get("/accounts/list", response_model=schemas.DetailedAccountListResponse)
+async def list_accounts_detailed(
+    q: Optional[str] = Query(None),
+    centre: Optional[str] = Query(None),
+    agence: Optional[str] = Query(None),
+    statut_facturation: Optional[str] = Query(None),
+    code_client: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+):
+    """Liste enrichie et paginée de comptes avec informations client, agence et centre."""
+    rows = await crud.get_accounts_list(
+        db,
+        q=q,
+        centre=centre,
+        agence=agence,
+        statut_facturation=statut_facturation,
+        code_client=code_client,
+        page=page,
+        page_size=page_size,
+    )
+    total = await crud.count_accounts_list(
+        db,
+        q=q,
+        centre=centre,
+        agence=agence,
+        statut_facturation=statut_facturation,
+        code_client=code_client,
+    )
+    return {"total": total, "items": [dict(r) for r in rows]}
+
+
 @router.get("/accounts/{account_id}", response_model=schemas.AccountRead)
+
 async def read_account(account_id: int, db: AsyncSession = Depends(get_db)):
     account = await crud.get_account(db, account_id)
     if not account:
