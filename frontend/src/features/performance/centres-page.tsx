@@ -38,7 +38,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import { xaf, xafCompact } from "@/lib/format";
@@ -121,13 +120,10 @@ function aggregateRows(rows: ReportRow[], centre: string, agency: string): Centr
     current.comptes += numberValue(row.total_comptes);
     current.actifs += numberValue(row.nb_comptes_actifs);
     current.arretes += numberValue(row.nb_comptes_arretes);
-    current.encours += enc;
-    current.facture += fac;
-    current.impaye += imp;
+    current.encours += numberValue(row.total_dette_balance_fcfa);
+    current.facture += numberValue(row.total_facture_fcfa);
+    current.impaye += numberValue(row.total_impaye_flux_fcfa);
     current.gestionnaires += numberValue(row.nb_gestionnaires);
-    current.dette30j += imp > 0 ? imp * 0.35 : enc * 0.14;
-    current.dette90j += imp > 0 ? imp * 0.15 : enc * 0.06;
-
     groups.set(rowCentre, current);
   }
 
@@ -2036,4 +2032,3 @@ export function CentresPage() {
     </div>
   );
 }
-
