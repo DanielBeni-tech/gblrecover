@@ -2,7 +2,9 @@
 
 Plateforme de Revenue Assurance de **CAMTEL** : centralise, fiabilise et rend actionnables les données de facturation, de paiement et de créances.
 
-> Promesse produit : « Voir juste. Comprendre vite. Agir avec confiance. »
+> Promesse produit : « Voir juste. Comprendre vite. Agir. »
+
+Direction visuelle **Canopée CAMTEL** : `DESIGN.md` et `docs/Design System officiel`.
 
 ## Identifiants et accès de démonstration
 
@@ -17,6 +19,15 @@ Plateforme de Revenue Assurance de **CAMTEL** : centralise, fiabilise et rend ac
 
 > **Source** : `frontend/src/api/client.ts` (`login`) et `frontend/src/data/mock-data.ts` (`demoCredentials`).
 > Ce compte est reconnu en mode démo (`VITE_DEMO_MODE=true`, défaut). En mode intégration (`VITE_DEMO_MODE=false`), l'authentification passe par le backend FastAPI (`POST /api/v1/auth/login`) et nécessite un utilisateur présent en base.
+
+### Routes publiques
+
+| Route | Page |
+|---|---|
+| `/` | Landing illustrée (équipe, CTA « Se connecter ») |
+| `/login` | Connexion illustrée |
+
+Un utilisateur déjà connecté voit sur `/` le CTA **Ouvrir l’espace** vers `/vue-nationale`. Le reste de l’application est derrière authentification.
 
 ### ⚠️ Incohérence connue
 
@@ -37,5 +48,6 @@ Plateforme de Revenue Assurance de **CAMTEL** : centralise, fiabilise et rend ac
 ## Documentation
 
 - `PRODUCT.md` — vision produit (GBLContext, PRD, TRD).
+- `DESIGN.md` — tokens Canopée, pages, équipe.
 - `backend/README.md` — guide du backend et état des endpoints API.
 - `docs/` — référentiels produit & technique complets.

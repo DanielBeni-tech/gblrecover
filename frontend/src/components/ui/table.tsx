@@ -17,7 +17,7 @@ export function TableHeader({ className, ...props }: HTMLAttributes<HTMLTableSec
 export function TableHead({ className, ...props }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
-      className={cn("t-label whitespace-nowrap px-3 py-2 font-medium text-on-surface-variant", className)}
+      className={cn("t-label whitespace-nowrap px-4 py-3 font-medium text-on-surface-variant", className)}
       {...props}
     />
   );
@@ -28,9 +28,9 @@ export function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSecti
 }
 
 export function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {
-  return <tr className={cn("h-10 transition-colors hover:bg-surface-container-highest", className)} {...props} />;
+  return <tr className={cn("h-12 transition-colors hover:bg-surface-container-low", className)} {...props} />;
 }
 
 export function TableCell({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn("whitespace-nowrap px-3 py-0 align-middle", className)} {...props} />;
+  return <td className={cn("whitespace-nowrap px-4 py-2.5 align-middle text-[13px]", className)} {...props} />;
 }

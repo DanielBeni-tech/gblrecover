@@ -8,7 +8,7 @@ import type { ReportRow } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loading, PageLoading } from "@/components/ui/loading";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -104,17 +104,7 @@ export function DashboardPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-9 w-72" />
-        <Skeleton className="h-[80px]" />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {[0, 1, 2, 3, 4].map((i) => (<Skeleton key={i} className="h-28" />))}
-        </div>
-        <Skeleton className="h-[300px]" />
-        <Skeleton className="h-96" />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (isError || !data) {
@@ -133,7 +123,12 @@ export function DashboardPage() {
 
   return (
     <>
-      <PageHeader size="lg" title="Tableau de bord — Revenue Assurance" subtitle="Vue décisionnelle consolidée des indicateurs de recouvrement CAMTEL" />
+      <PageHeader
+        size="lg"
+        title="Vue nationale"
+        subtitle="Indicateurs consolidés de recouvrement CAMTEL. Les montants suivent la Balance Excel."
+        nextAction="Filtrez un centre, puis ouvrez un client du Top 20."
+      />
 
       <div className="flex items-center gap-2 text-[12px] text-on-surface-variant">
         <RefreshCw className="h-3 w-3" />
@@ -186,7 +181,7 @@ export function DashboardPage() {
         <CardHeader><CardTitle>Évolution de la dette vs encaissements</CardTitle></CardHeader>
         <CardContent>
           {trend.length === 0 ? (
-            <div className="py-8 text-center text-[13px] text-on-surface-variant">Aucune donnée d'évolution disponible pour ce filtre.</div>
+            <div className="py-10 text-center text-[13px] text-on-surface-variant">Aucune évolution pour ce filtre. Choisissez « Tous les mois » ou un autre centre.</div>
           ) : (<TrendChart data={trend} />)}
         </CardContent>
       </Card>
@@ -212,8 +207,10 @@ export function DashboardPage() {
               <TableHead className="text-right">Action</TableHead>
             </tr></TableHeader>
             <TableBody>
-              {loadingIndebted ? Array.from({ length: 5 }).map((_, i) => (<TableRow key={i}><TableCell colSpan={11}><Skeleton className="h-8 w-full" /></TableCell></TableRow>))
-              : (topIndebted ?? []).length === 0 ? (<TableRow><TableCell colSpan={11} className="py-8 text-center text-on-surface-variant">Aucune donnée disponible.</TableCell></TableRow>)
+              {loadingIndebted ? (
+                <TableRow><TableCell colSpan={11}><Loading className="py-8" /></TableCell></TableRow>
+              )
+              : (topIndebted ?? []).length === 0 ? (<TableRow><TableCell colSpan={11} className="py-10 text-center text-on-surface-variant">Aucun client endetté pour ce filtre. Élargissez le périmètre ou réinitialisez les mois.</TableCell></TableRow>)
               : (topIndebted ?? []).map((row: ReportRow, idx: number) => {
                 const href = indebtedSourceUrl(row);
                 return (
@@ -257,7 +254,9 @@ export function DashboardPage() {
               <TableHead className="text-right">Action</TableHead>
             </tr></TableHeader>
             <TableBody>
-              {loadingDebts ? Array.from({ length: 5 }).map((_, i) => (<TableRow key={i}><TableCell colSpan={10}><Skeleton className="h-8 w-full" /></TableCell></TableRow>))
+              {loadingDebts ? (
+                <TableRow><TableCell colSpan={10}><Loading className="py-8" /></TableCell></TableRow>
+              )
               : (camtelDebts ?? []).length === 0 ? (<TableRow><TableCell colSpan={10} className="py-8 text-center text-on-surface-variant">Aucune dette CAMTEL enregistrée.</TableCell></TableRow>)
               : (camtelDebts ?? []).map((row: ReportRow, idx: number) => {
                 const href = camtelSourceUrl(row);

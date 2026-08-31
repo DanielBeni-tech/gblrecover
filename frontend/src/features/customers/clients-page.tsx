@@ -18,7 +18,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoading } from "@/components/ui/loading";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -149,8 +149,9 @@ export function ClientsPage() {
   return (
     <>
       <PageHeader
-        title="Clients & Comptes"
-        subtitle="Priorisez les dossiers à fort encours, filtrez le portefeuille réel, puis lancez l’action de recouvrement."
+        title="Clients"
+        subtitle="Portefeuille réel : priorisez l’encours, ouvrez un dossier, lancez la relance."
+        nextAction="Filtrez le portefeuille, puis ouvrez le dossier prioritaire."
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> Nouveau dossier
@@ -182,7 +183,7 @@ export function ClientsPage() {
             <Label htmlFor="statut">Statut facturation</Label>
             <Select id="statut" value={statut} onChange={(e) => setStatut(e.target.value)}>
               <option value="">Tous les statuts</option>
-              <option value="En cours">En cours</option>
+              <option value="En cours de vérification">En cours</option>
               <option value="Arrêt">Arrêt</option>
             </Select>
           </div>
@@ -225,15 +226,11 @@ export function ClientsPage() {
         </div>
 
         {isLoading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
+          <PageLoading />
         ) : data && data.items.length === 0 ? (
           <EmptyState
-            title="Aucun client trouvé"
-            description="Modifiez votre recherche, ajustez les filtres ou créez un nouveau dossier client pour commencer."
+            title="Aucun client pour ces filtres"
+            description="Modifiez la recherche, élargissez le centre ou créez un nouveau dossier."
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button variant="outline" size="sm" onClick={reset}>

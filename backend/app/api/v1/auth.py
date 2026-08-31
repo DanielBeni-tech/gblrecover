@@ -47,7 +47,7 @@ async def login(data: schemas.AuthLogin, db: AsyncSession = Depends(get_db)):
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer",
-        user=schemas.UserRead.from_orm(user),
+        user=schemas.UserRead.model_validate(user),
     )
 
 

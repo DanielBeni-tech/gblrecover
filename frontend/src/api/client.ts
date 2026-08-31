@@ -771,6 +771,22 @@ export function getAvailableMonths(): Promise<ReportRow[]> {
 }
 
 // ============================================================
+// Analyse de la dette — aging analytics
+// ============================================================
+
+export function getDebtAgingByCentre(opts: { centre?: string; agence?: string; marche?: string } = {}): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/aging-by-centre", { query: qs(opts) });
+}
+
+export function getDebtAgingByAgence(opts: { centre?: string; marche?: string; limit?: number } = {}): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/aging-by-agence", { query: qs({ ...opts, limit: opts.limit ?? 10 }) });
+}
+
+export function getDebtAgingTrend(opts: { centre?: string; agence?: string; marche?: string } = {}): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/aging-trend", { query: qs(opts) });
+}
+
+// ============================================================
 // Administration & Qualité (§3.11)
 // ============================================================
 
@@ -1140,6 +1156,41 @@ export async function listClientMarkets(): Promise<string[]> {
   const res = await apiRequest<{ items: string[] }>("/clients/markets");
   return res.items ?? [];
 }
+
+export interface DetailedAccountRow {
+  num_compte: number;
+  code_client: number;
+  raison_sociale: string | null;
+  marche: string | null;
+  id_agence: string | null;
+  nom_agence: string | null;
+  nom_centre: string | null;
+  mat_gestionnaire: string | null;
+  nom_gestionnaire: string | null;
+  statut_facturation: string | null;
+  identification: string | null;
+  e_bill: string | null;
+  balance: number;
+}
+
+export async function listAccountsDetailed(
+  filters: { query?: string; agency?: string; center?: string; statut_facturation?: string; code_client?: number },
+  page: number = 1,
+  pageSize: number = 50,
+): Promise<{ total: number; items: DetailedAccountRow[] }> {
+  return apiRequest<{ total: number; items: DetailedAccountRow[] }>("/accounts/list", {
+    query: qs({
+      q: filters.query,
+      centre: filters.center,
+      agence: filters.agency,
+      statut_facturation: filters.statut_facturation,
+      code_client: filters.code_client,
+      page,
+      page_size: pageSize,
+    }),
+  });
+}
+
 
 // ============================================================
 // Dashboard (vue agrégée consommée par la page Dashboard)

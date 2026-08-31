@@ -505,6 +505,98 @@ async def get_accounts(db: AsyncSession, client_id: int | None = None, agency_id
     return result.scalars().all()
 
 
+def _accounts_list_where(
+    q: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    statut_facturation: str | None = None,
+    code_client: int | None = None,
+) -> tuple[str, dict]:
+    params: dict = {}
+    where_clauses = ["1=1"]
+
+    if q:
+        where_clauses.append("(cl.raison_sociale ILIKE :q OR CAST(cp.num_compte AS TEXT) ILIKE :q OR CAST(cp.code_client AS TEXT) ILIKE :q)")
+        params["q"] = f"%{q}%"
+    if centre:
+        where_clauses.append("a.nom_centre = :centre")
+        params["centre"] = centre
+    if agence:
+        where_clauses.append("cp.id_agence = :agence")
+        params["agence"] = agence
+    if statut_facturation:
+        where_clauses.append("cp.statut_facturation ILIKE :statut_facturation")
+        params["statut_facturation"] = statut_facturation
+    if code_client is not None:
+        where_clauses.append("cp.code_client = :code_client")
+        params["code_client"] = code_client
+
+    return " AND ".join(where_clauses), params
+
+
+async def count_accounts_list(
+    db: AsyncSession,
+    q: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    statut_facturation: str | None = None,
+    code_client: int | None = None,
+) -> int:
+    where_sql, params = _accounts_list_where(q=q, centre=centre, agence=agence, statut_facturation=statut_facturation, code_client=code_client)
+    sql = f"""
+    SELECT COUNT(*) AS total
+    FROM compte cp
+    JOIN client cl ON cp.code_client = cl.code_client
+    LEFT JOIN agence a ON cp.id_agence = a.id_agence
+    WHERE {where_sql}
+    """
+    result = await db.execute(text(sql), params)
+    row = result.mappings().first()
+    return int(row["total"]) if row else 0
+
+
+async def get_accounts_list(
+    db: AsyncSession,
+    q: str | None = None,
+    centre: str | None = None,
+    agence: str | None = None,
+    statut_facturation: str | None = None,
+    code_client: int | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    where_sql, params = _accounts_list_where(q=q, centre=centre, agence=agence, statut_facturation=statut_facturation, code_client=code_client)
+    sql = f"""
+    SELECT 
+        cp.num_compte,
+        cp.code_client,
+        cl.raison_sociale,
+        cl.marche,
+        cp.id_agence,
+        a.nom_agence,
+        a.nom_centre,
+        cp.mat_gestionnaire,
+        g.nom_gestionnaire,
+        cp.statut_facturation,
+        cp.identification,
+        cp.e_bill,
+        COALESCE(cp.balance, 0) AS balance
+    FROM compte cp
+    JOIN client cl ON cp.code_client = cl.code_client
+    LEFT JOIN agence a ON cp.id_agence = a.id_agence
+    LEFT JOIN gestionnaire g ON cp.mat_gestionnaire = g.mat_gestionnaire
+    WHERE {where_sql}
+    ORDER BY cp.balance DESC, cp.num_compte
+    LIMIT :limit OFFSET :offset
+    """
+    params["limit"] = page_size
+    params["offset"] = (page - 1) * page_size
+
+    result = await db.execute(text(sql), params)
+    return result.mappings().all()
+
+
+
 async def get_account(db: AsyncSession, account_id: int):
     result = await db.execute(select(Compte).where(Compte.num_compte == account_id))
     return result.scalars().first()
@@ -1104,13 +1196,64 @@ async def reports_centres_agences(db):
 
 
 async def reports_gestionnaires(db):
-    result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires ORDER BY total_recouvre DESC LIMIT 100"))
-    return result.mappings().all()
+    try:
+        result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires ORDER BY total_recouvre DESC LIMIT 100"))
+        return result.mappings().all()
+    except Exception:
+        try:
+            result = await db.execute(text("SELECT * FROM vw_analyse_gestionnaires LIMIT 100"))
+            return result.mappings().all()
+        except Exception:
+            query = text("""
+                SELECT 
+                    g.mat_gestionnaire,
+                    g.nom_gestionnaire,
+                    a.nom_agence,
+                    c.nom_centre,
+                    COUNT(DISTINCT cp.num_compte) AS volume_comptes,
+                    COUNT(DISTINCT cp.num_compte) AS dossiers,
+                    COUNT(DISTINCT cp.num_compte) AS workload,
+                    COALESCE(SUM(cp.balance), 0) AS total_impaye,
+                    COALESCE(SUM(cp.balance), 0) AS encours
+                FROM gestionnaire g
+                LEFT JOIN compte cp ON g.mat_gestionnaire = cp.mat_gestionnaire
+                LEFT JOIN agence a ON cp.id_agence = a.id_agence
+                LEFT JOIN centre c ON a.nom_centre = c.nom_centre
+                GROUP BY g.mat_gestionnaire, g.nom_gestionnaire, a.nom_agence, c.nom_centre
+            """)
+            result = await db.execute(query)
+            return result.mappings().all()
 
 
 async def reports_gestionnaire(db, manager_id):
-    result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires WHERE mat_gestionnaire = :mid ORDER BY periode DESC"), {"mid": manager_id})
-    return result.mappings().all()
+    try:
+        result = await db.execute(text("SELECT * FROM vw_performance_gestionnaires WHERE mat_gestionnaire = :mid ORDER BY periode DESC"), {"mid": manager_id})
+        return result.mappings().all()
+    except Exception:
+        try:
+            result = await db.execute(text("SELECT * FROM vw_analyse_gestionnaires WHERE mat_gestionnaire = :mid"), {"mid": manager_id})
+            return result.mappings().all()
+        except Exception:
+            query = text("""
+                SELECT 
+                    g.mat_gestionnaire,
+                    g.nom_gestionnaire,
+                    a.nom_agence,
+                    c.nom_centre,
+                    COUNT(DISTINCT cp.num_compte) AS volume_comptes,
+                    COUNT(DISTINCT cp.num_compte) AS dossiers,
+                    COALESCE(SUM(cp.balance), 0) AS total_impaye,
+                    COALESCE(SUM(cp.balance), 0) AS encours
+                FROM gestionnaire g
+                LEFT JOIN compte cp ON g.mat_gestionnaire = cp.mat_gestionnaire
+                LEFT JOIN agence a ON cp.id_agence = a.id_agence
+                LEFT JOIN centre c ON a.nom_centre = c.nom_centre
+                WHERE g.mat_gestionnaire = :mid
+                GROUP BY g.mat_gestionnaire, g.nom_gestionnaire, a.nom_agence, c.nom_centre
+            """)
+            result = await db.execute(query, {"mid": manager_id})
+            return result.mappings().all()
+
 
 
 async def reports_marches(db):
@@ -1244,6 +1387,135 @@ async def top_camtel_debts(db, centres: list[str] | None = None, agences: list[s
 
 async def top10_camtel_debts(db, centres: list[str] | None = None, agences: list[str] | None = None):
     return await top_camtel_debts(db, centres=centres, agences=agences, limit=20)
+
+
+# ============================================================
+# Debt Aging Analytics (Analyse de la dette)
+# ============================================================
+
+
+async def debt_aging_by_centre(db, centre: str | None = None, agence: str | None = None, marche: str | None = None):
+    """Aging bucket breakdown by centre — aggregates outstanding invoices."""
+    conditions = ["f.status <> 'CANCELLED'", "f.outstanding_amount > 0"]
+    params: dict = {}
+    if centre:
+        conditions.append("c.nom_centre = :centre")
+        params["centre"] = centre
+    if agence:
+        conditions.append("ag.id_agence = :agence")
+        params["agence"] = agence
+    if marche:
+        conditions.append("cl.marche = :marche")
+        params["marche"] = marche
+    where = " AND ".join(conditions)
+    result = await db.execute(text(f"""
+        SELECT
+            c.nom_centre,
+            COUNT(DISTINCT f.num_compte) AS nb_comptes,
+            SUM(f.outstanding_amount) AS total,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 0 AND 30 THEN f.outstanding_amount ELSE 0 END) AS tranche_0_30,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 31 AND 60 THEN f.outstanding_amount ELSE 0 END) AS tranche_31_60,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 61 AND 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_61_90,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) > 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_plus_90,
+            SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye,
+            SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN client cl ON cp.code_client = cl.code_client
+        JOIN agence ag ON cp.id_agence = ag.id_agence
+        JOIN centre c ON ag.nom_centre = c.nom_centre
+        WHERE {where}
+        GROUP BY c.nom_centre
+        ORDER BY total DESC
+    """), params)
+    rows = result.mappings().all()
+    # Compute taux_recouvrement_pct
+    out = []
+    for r in rows:
+        d = dict(r)
+        tf = float(d.get('total_facture') or 0)
+        ti = float(d.get('total_impaye') or 0)
+        d['taux_recouvrement_pct'] = round((tf - ti) * 100.0 / tf, 2) if tf else 0
+        out.append(d)
+    return out
+
+
+async def debt_aging_by_agence(db, centre: str | None = None, marche: str | None = None, limit: int = 10):
+    """Aging bucket breakdown by agence — top agencies by outstanding."""
+    conditions = ["f.status <> 'CANCELLED'", "f.outstanding_amount > 0"]
+    params: dict = {"limit": limit}
+    if centre:
+        conditions.append("c.nom_centre = :centre")
+        params["centre"] = centre
+    if marche:
+        conditions.append("cl.marche = :marche")
+        params["marche"] = marche
+    where = " AND ".join(conditions)
+    result = await db.execute(text(f"""
+        SELECT
+            ag.id_agence,
+            ag.nom_agence,
+            c.nom_centre,
+            COUNT(DISTINCT f.num_compte) AS nb_comptes,
+            SUM(f.outstanding_amount) AS total,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 0 AND 30 THEN f.outstanding_amount ELSE 0 END) AS tranche_0_30,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 31 AND 60 THEN f.outstanding_amount ELSE 0 END) AS tranche_31_60,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 61 AND 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_61_90,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) > 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_plus_90,
+            SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye,
+            SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN client cl ON cp.code_client = cl.code_client
+        JOIN agence ag ON cp.id_agence = ag.id_agence
+        JOIN centre c ON ag.nom_centre = c.nom_centre
+        WHERE {where}
+        GROUP BY ag.id_agence, ag.nom_agence, c.nom_centre
+        ORDER BY total DESC
+        LIMIT :limit
+    """), params)
+    rows = result.mappings().all()
+    out = []
+    for r in rows:
+        d = dict(r)
+        tf = float(d.get('total_facture') or 0)
+        ti = float(d.get('total_impaye') or 0)
+        d['taux_recouvrement_pct'] = round((tf - ti) * 100.0 / tf, 2) if tf else 0
+        out.append(d)
+    return out
+
+
+async def debt_aging_trend(db, centre: str | None = None, agence: str | None = None, marche: str | None = None):
+    """Monthly trend of aging buckets — for the stacked bar chart."""
+    conditions = ["f.status <> 'CANCELLED'", "f.outstanding_amount > 0"]
+    params: dict = {}
+    if centre:
+        conditions.append("c.nom_centre = :centre")
+        params["centre"] = centre
+    if agence:
+        conditions.append("ag.id_agence = :agence")
+        params["agence"] = agence
+    if marche:
+        conditions.append("cl.marche = :marche")
+        params["marche"] = marche
+    where = " AND ".join(conditions)
+    result = await db.execute(text(f"""
+        SELECT
+            TO_CHAR(date_trunc('month', f.date_emission), 'YYYY-MM') AS mois,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 0 AND 30 THEN f.outstanding_amount ELSE 0 END) AS tranche_0_30,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 31 AND 60 THEN f.outstanding_amount ELSE 0 END) AS tranche_31_60,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 61 AND 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_61_90,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) > 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_plus_90
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN client cl ON cp.code_client = cl.code_client
+        JOIN agence ag ON cp.id_agence = ag.id_agence
+        JOIN centre c ON ag.nom_centre = c.nom_centre
+        WHERE {where}
+        GROUP BY date_trunc('month', f.date_emission)
+        ORDER BY date_trunc('month', f.date_emission) ASC
+    """), params)
+    return result.mappings().all()
 
 
 # ============================================================
