@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, ChevronRight, LogOut, Menu, Search, Settings, X } from "lucide-react";
+import { Bell, ChevronRight, Home, LogOut, Menu, Search, Settings, X } from "lucide-react";
 import { getClient } from "@/api/client";
 import { Avatar } from "@/components/ui/avatar";
 
@@ -106,6 +106,14 @@ export function Topbar({ onMenuOpen }: { onMenuOpen: () => void }) {
 
       {/* Actions utilisateur & Avatar */}
       <div className="flex shrink-0 items-center gap-2 ml-auto">
+        <Link
+          to="/"
+          aria-label="Présentation publique"
+          title="Présentation publique"
+          className="rounded p-2 text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors"
+        >
+          <Home className="h-[18px] w-[18px]" />
+        </Link>
         <button aria-label="Notifications" className="rounded p-2 text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors">
           <Bell className="h-[18px] w-[18px]" />
         </button>

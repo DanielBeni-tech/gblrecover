@@ -1390,6 +1390,135 @@ async def top10_camtel_debts(db, centres: list[str] | None = None, agences: list
 
 
 # ============================================================
+# Debt Aging Analytics (Analyse de la dette)
+# ============================================================
+
+
+async def debt_aging_by_centre(db, centre: str | None = None, agence: str | None = None, marche: str | None = None):
+    """Aging bucket breakdown by centre — aggregates outstanding invoices."""
+    conditions = ["f.status <> 'CANCELLED'", "f.outstanding_amount > 0"]
+    params: dict = {}
+    if centre:
+        conditions.append("c.nom_centre = :centre")
+        params["centre"] = centre
+    if agence:
+        conditions.append("ag.id_agence = :agence")
+        params["agence"] = agence
+    if marche:
+        conditions.append("cl.marche = :marche")
+        params["marche"] = marche
+    where = " AND ".join(conditions)
+    result = await db.execute(text(f"""
+        SELECT
+            c.nom_centre,
+            COUNT(DISTINCT f.num_compte) AS nb_comptes,
+            SUM(f.outstanding_amount) AS total,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 0 AND 30 THEN f.outstanding_amount ELSE 0 END) AS tranche_0_30,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 31 AND 60 THEN f.outstanding_amount ELSE 0 END) AS tranche_31_60,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 61 AND 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_61_90,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) > 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_plus_90,
+            SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye,
+            SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN client cl ON cp.code_client = cl.code_client
+        JOIN agence ag ON cp.id_agence = ag.id_agence
+        JOIN centre c ON ag.nom_centre = c.nom_centre
+        WHERE {where}
+        GROUP BY c.nom_centre
+        ORDER BY total DESC
+    """), params)
+    rows = result.mappings().all()
+    # Compute taux_recouvrement_pct
+    out = []
+    for r in rows:
+        d = dict(r)
+        tf = float(d.get('total_facture') or 0)
+        ti = float(d.get('total_impaye') or 0)
+        d['taux_recouvrement_pct'] = round((tf - ti) * 100.0 / tf, 2) if tf else 0
+        out.append(d)
+    return out
+
+
+async def debt_aging_by_agence(db, centre: str | None = None, marche: str | None = None, limit: int = 10):
+    """Aging bucket breakdown by agence — top agencies by outstanding."""
+    conditions = ["f.status <> 'CANCELLED'", "f.outstanding_amount > 0"]
+    params: dict = {"limit": limit}
+    if centre:
+        conditions.append("c.nom_centre = :centre")
+        params["centre"] = centre
+    if marche:
+        conditions.append("cl.marche = :marche")
+        params["marche"] = marche
+    where = " AND ".join(conditions)
+    result = await db.execute(text(f"""
+        SELECT
+            ag.id_agence,
+            ag.nom_agence,
+            c.nom_centre,
+            COUNT(DISTINCT f.num_compte) AS nb_comptes,
+            SUM(f.outstanding_amount) AS total,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 0 AND 30 THEN f.outstanding_amount ELSE 0 END) AS tranche_0_30,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 31 AND 60 THEN f.outstanding_amount ELSE 0 END) AS tranche_31_60,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 61 AND 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_61_90,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) > 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_plus_90,
+            SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS total_impaye,
+            SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS total_facture
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN client cl ON cp.code_client = cl.code_client
+        JOIN agence ag ON cp.id_agence = ag.id_agence
+        JOIN centre c ON ag.nom_centre = c.nom_centre
+        WHERE {where}
+        GROUP BY ag.id_agence, ag.nom_agence, c.nom_centre
+        ORDER BY total DESC
+        LIMIT :limit
+    """), params)
+    rows = result.mappings().all()
+    out = []
+    for r in rows:
+        d = dict(r)
+        tf = float(d.get('total_facture') or 0)
+        ti = float(d.get('total_impaye') or 0)
+        d['taux_recouvrement_pct'] = round((tf - ti) * 100.0 / tf, 2) if tf else 0
+        out.append(d)
+    return out
+
+
+async def debt_aging_trend(db, centre: str | None = None, agence: str | None = None, marche: str | None = None):
+    """Monthly trend of aging buckets — for the stacked bar chart."""
+    conditions = ["f.status <> 'CANCELLED'", "f.outstanding_amount > 0"]
+    params: dict = {}
+    if centre:
+        conditions.append("c.nom_centre = :centre")
+        params["centre"] = centre
+    if agence:
+        conditions.append("ag.id_agence = :agence")
+        params["agence"] = agence
+    if marche:
+        conditions.append("cl.marche = :marche")
+        params["marche"] = marche
+    where = " AND ".join(conditions)
+    result = await db.execute(text(f"""
+        SELECT
+            TO_CHAR(date_trunc('month', f.date_emission), 'YYYY-MM') AS mois,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 0 AND 30 THEN f.outstanding_amount ELSE 0 END) AS tranche_0_30,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 31 AND 60 THEN f.outstanding_amount ELSE 0 END) AS tranche_31_60,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) BETWEEN 61 AND 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_61_90,
+            SUM(CASE WHEN (CURRENT_DATE - f.date_emission) > 90 THEN f.outstanding_amount ELSE 0 END) AS tranche_plus_90
+        FROM facture f
+        JOIN compte cp ON f.num_compte = cp.num_compte
+        JOIN client cl ON cp.code_client = cl.code_client
+        JOIN agence ag ON cp.id_agence = ag.id_agence
+        JOIN centre c ON ag.nom_centre = c.nom_centre
+        WHERE {where}
+        GROUP BY date_trunc('month', f.date_emission)
+        ORDER BY date_trunc('month', f.date_emission) ASC
+    """), params)
+    return result.mappings().all()
+
+
+# ============================================================
 # Administration (§3.11)
 # ============================================================
 

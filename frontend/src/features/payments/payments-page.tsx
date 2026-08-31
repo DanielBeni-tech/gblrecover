@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoading } from "@/components/ui/loading";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { xaf, dateFr } from "@/lib/format";
@@ -166,7 +166,8 @@ export function PaymentsPage() {
     <>
       <PageHeader
         title="Paiements"
-        subtitle="Suivi des règlements par facture — statuts dérivés des montants réglés. Le tri « Émission » croissant remonte les factures les plus anciennes, meilleure approximation des retards (l'échéance n'est pas fournie par le flux GBL actuel)."
+        subtitle="Règlements par facture. Le tri « Émission » croissant remonte les plus anciennes."
+        nextAction="Filtrez les impayés, puis ouvrez la facture à relancer."
       />
       <Card className="p-4">
         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-12">
@@ -203,18 +204,14 @@ export function PaymentsPage() {
           )}
         </div>
         {isLoading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
+          <PageLoading />
         ) : items.length === 0 ? (
           <EmptyState
-            title="Aucune facture dans ce périmètre"
+            title="Aucune facture pour ces filtres"
             description={
               debounced || statusFilter
-                ? "Ajustez la recherche ou le filtre de statut de règlement pour retrouver des factures."
-                : "Aucune facture disponible côté serveur."
+                ? "Ajustez la recherche ou le statut de règlement."
+                : "Aucune facture disponible. Vérifiez l’import Excel ou ouvrez un client."
             }
           />
         ) : (

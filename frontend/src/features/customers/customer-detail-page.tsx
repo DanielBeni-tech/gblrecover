@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoading } from "@/components/ui/loading";
 import { Tabs } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Timeline } from "@/components/ui/timeline";
@@ -96,13 +96,7 @@ export function CustomerDetailPage() {
   }, [tab, focusCompte, customer]);
 
   if (isLoading) {
-    return (
-      <div className="space-y-5">
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-80 w-full" />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (isError || !customer) {
@@ -162,6 +156,10 @@ export function CustomerDetailPage() {
                 ID : {customer.id}
               </span>
             </div>
+            <p className="flex items-center gap-1.5 text-[13px] font-medium text-primary">
+              <ArrowRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Lisez le résumé, puis ouvrez l’onglet Créances pour relancer.
+            </p>
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={customerStatusTone[customer.status]}>{customerStatusLabel[customer.status]}</Badge>
               <span className="inline-flex items-center gap-1 rounded-full border border-outline-variant bg-surface-container px-2.5 py-0.5 text-[12px] text-on-surface">
@@ -392,10 +390,9 @@ export function CustomerDetailPage() {
           <div className="overflow-x-auto">
             {customer.payments.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-12 text-center">
-                <p className="text-[15px] font-semibold text-on-surface">Aucune donnée de paiement</p>
+                <p className="text-[15px] font-semibold text-on-surface">Aucun paiement enregistré</p>
                 <p className="max-w-md text-[13px] text-on-surface-variant">
-                  La source de données Excel ne contient pas d'information de paiement.
-                  Les paiements seront disponibles une fois intégrés depuis le système financier.
+                  Le fichier Excel GBL n’inclut pas les règlements. Ouvrez l’onglet Factures pour relancer sur le solde restant.
                 </p>
               </div>
             ) : (
@@ -456,7 +453,7 @@ export function CustomerDetailPage() {
                 {visibleReceivables.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="py-8 text-center text-on-surface-variant">
-                      Aucune créance impayée pour ce périmètre.
+                      Aucune créance impayée pour ce périmètre. Ouvrez l’onglet Factures ou élargissez le centre.
                     </TableCell>
                   </TableRow>
                 ) : (

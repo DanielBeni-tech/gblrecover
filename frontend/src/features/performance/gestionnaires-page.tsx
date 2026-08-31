@@ -6,11 +6,12 @@ import {
   listCentres,
   listManagers,
 } from "@/api/client";
+import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/ui/loading";
 import { Pagination } from "@/components/ui/pagination";
 import {
   Table,
@@ -431,14 +432,11 @@ export function GestionnairesPage() {
   return (
     <div className="space-y-5">
       {/* ── HEADER ── */}
-      <div>
-        <h1 className="text-[22px] font-bold leading-7 tracking-tight text-on-surface">
-          Gestionnaires
-        </h1>
-        <p className="mt-0.5 text-[13px] text-on-surface-variant">
-          Comparez la performance des gestionnaires et identifiez les écarts de recouvrement.
-        </p>
-      </div>
+      <PageHeader
+        title="Comparer les gestionnaires"
+        subtitle="Écarts de recouvrement par portefeuille."
+        nextAction="Identifiez un écart, puis ouvrez le portefeuille du gestionnaire."
+      />
 
       {hasError && (
         <div className="flex items-start gap-2 rounded-panel border border-error/30 bg-error-container p-3.5 text-[13px] text-on-error-container">
@@ -779,20 +777,18 @@ export function GestionnairesPage() {
 
                 <TableBody>
                   {isLoading ? (
-                    Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell colSpan={10}>
-                          <Skeleton className="h-6 w-full" />
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    <TableRow>
+                      <TableCell colSpan={10}>
+                        <Loading className="py-8" />
+                      </TableCell>
+                    </TableRow>
                   ) : paginated.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={10}
                         className="py-10 text-center text-[13px] text-on-surface-variant"
                       >
-                        Aucun gestionnaire correspondant aux filtres.
+                        Aucun gestionnaire pour ces filtres. Réinitialisez le centre, l’agence ou la recherche.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -918,9 +914,9 @@ export function GestionnairesPage() {
               </CardHeader>
               <CardContent className="p-2.5 space-y-1.5">
                 {isLoading
-                  ? Array.from({ length: 4 }).map((_, i) => (
-                      <Skeleton key={i} className="h-9 w-full" />
-                    ))
+                  ? (
+                      <Loading className="py-6" />
+                    )
                   : topPerformers.map((r, i) => (
                       <div
                         key={r.mat}
@@ -976,9 +972,9 @@ export function GestionnairesPage() {
               </CardHeader>
               <CardContent className="p-2.5 space-y-1.5">
                 {isLoading
-                  ? Array.from({ length: 4 }).map((_, i) => (
-                      <Skeleton key={i} className="h-9 w-full" />
-                    ))
+                  ? (
+                      <Loading className="py-6" />
+                    )
                   : topDecrocheurs.map((r, i) => (
                       <div
                         key={r.mat}

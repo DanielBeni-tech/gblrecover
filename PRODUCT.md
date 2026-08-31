@@ -25,7 +25,7 @@ Autres audiences confirmées : responsable de centre de gestion (pilotage d'équ
 
 ## Product Purpose
 
-GBLRecover est la plateforme web de Revenue Assurance de CAMTEL qui centralise, fiabilise et rend actionnables les données de facturation, de paiement et de créances, pour passer d'un recouvrement fondé sur des fichiers Excel dispersés à un recouvrement **consolidé, priorisé et mesurable**. Promesse produit : « Voir juste. Comprendre vite. Agir avec confiance. » Le succès se mesure par la réduction du temps d'accès à l'information, la maîtrise de la dette, la traçabilité des actions et un pilotage fondé sur des indicateurs partagés.
+GBLRecover est la plateforme web de Revenue Assurance de CAMTEL qui centralise, fiabilise et rend actionnables les données de facturation, de paiement et de créances, pour passer d'un recouvrement fondé sur des fichiers Excel dispersés à un recouvrement **consolidé, priorisé et mesurable**. Promesse produit : « Voir juste. Comprendre vite. Agir. » Le succès se mesure par la réduction du temps d'accès à l'information, la maîtrise de la dette, la traçabilité des actions et un pilotage fondé sur des indicateurs partagés.
 
 ## Positioning
 
@@ -33,7 +33,7 @@ Point de référence opérationnel unique de CAMTEL pour comprendre la dette cli
 
 ## Operating Context
 
-- Environnement : plateforme web métier interne, données sensibles et volumineuses ; travail quotidien sur poste (desktop d'abord, adaptation mobile contrôlée — sidebar persistante desktop, drawer mobile).
+- Environnement : plateforme web métier interne, données sensibles et volumineuses ; **landing publique** (`/`) puis login (`/login`) ; travail quotidien sur poste (desktop d’abord, adaptation mobile contrôlée — sidebar persistante desktop, drawer mobile).
 - Cycle métier : réception des rapports Excel → contrôle du format → import et normalisation → centralisation → rapprochement des paiements → calcul des soldes et créances → dashboard et analyse → priorisation → action du gestionnaire → suivi et pilotage.
 - Livraison : MVP démontrable en vertical slice (login → dashboard → recherche → fiche client → factures/paiements → import Excel + rapport de rejets), déployé et présentable dans un délai de 7 jours.
 - Décision retenue (assomption) : la livraison actuelle est un **prototype/démo** (Vercel/Railway), pas un déploiement interne CAMTEL de production.
@@ -64,10 +64,9 @@ Facts volontairement non tranchés (questions ouvertes de GBLContext §19, à co
 
 ## Brand Commitments
 
-- Nom : GBLRecover. Client : CAMTEL. Langue : français professionnel.
-- Personnalité de marque documentée : fiable, analytique, pragmatique (DESIGN.md des maquettes) — Information Density, professionnalisme fonctionnel.
-- Design System officiel : `docs/Design System officiel` et `docs/Design_System_officiel.pdf` ; tokens Material-style dans `gbl maquette/*/DESIGN.md` (bleu corporatif profond `#004085`, ambre doré `#FFC107` en accent secondaire, Inter + JetBrains Mono, tables denses, rayon 4px, sidebar 260px, grille 12 colonnes / 1440px). Les couleurs fonctionnelles ont un sens stable ; le rouge est réservé au critique/destructif.
-- Logo : `gbl maquette/gblrecover_official_logo/`.
+- Palette **Canopée CAMTEL** : ivoire `#F6F3EC`, encre `#14221F`, teal `#0F5C56`, cuivre `#C45C26`. Tokens dans `frontend/src/index.css` et `DESIGN.md`. Design System officiel : `docs/Design System officiel`.
+- Personnalité : fiable, analytique, pragmatique. Landing publique `/` avant login ; espace métier derrière authentification.
+- Logo historique : `gbl maquette/gblrecover_official_logo/`.
 
 ## Evidence on Hand
 

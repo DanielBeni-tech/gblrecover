@@ -771,6 +771,22 @@ export function getAvailableMonths(): Promise<ReportRow[]> {
 }
 
 // ============================================================
+// Analyse de la dette — aging analytics
+// ============================================================
+
+export function getDebtAgingByCentre(opts: { centre?: string; agence?: string; marche?: string } = {}): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/aging-by-centre", { query: qs(opts) });
+}
+
+export function getDebtAgingByAgence(opts: { centre?: string; marche?: string; limit?: number } = {}): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/aging-by-agence", { query: qs({ ...opts, limit: opts.limit ?? 10 }) });
+}
+
+export function getDebtAgingTrend(opts: { centre?: string; agence?: string; marche?: string } = {}): Promise<ReportRow[]> {
+  return apiRequest<ReportRow[]>("/dashboards/aging-trend", { query: qs(opts) });
+}
+
+// ============================================================
 // Administration & Qualité (§3.11)
 // ============================================================
 

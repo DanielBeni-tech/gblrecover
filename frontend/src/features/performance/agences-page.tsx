@@ -4,7 +4,7 @@ import { listAgencies } from "@/api/client";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { KpiCard } from "@/components/ui/kpi-card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/ui/loading";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -34,8 +34,9 @@ export function AgencesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Performance par Agences"
-        subtitle="Supervision de la performance opérationnelle et suivi du réseau d'agences."
+        title="Comparer les agences"
+        subtitle="Supervision du réseau d’agences et rattachement aux centres."
+        nextAction="Cherchez une agence, puis ouvrez son centre de rattachement."
       />
 
       {hasError && (
@@ -94,17 +95,15 @@ export function AgencesPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={4}>
-                        <Skeleton className="h-6 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <Loading className="py-8" />
+                    </TableCell>
+                  </TableRow>
                 ) : filteredAgencies.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-[13px] text-on-surface-variant">
-                      Aucune agence correspondant à la recherche.
+                    <TableCell colSpan={4} className="py-10 text-center text-[13px] text-on-surface-variant">
+                      Aucune agence pour cette recherche. Effacez le filtre ou vérifiez le rattachement centre.
                     </TableCell>
                   </TableRow>
                 ) : (

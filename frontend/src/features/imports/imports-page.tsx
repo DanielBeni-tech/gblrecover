@@ -184,8 +184,9 @@ export function ImportsPage() {
   return (
     <>
       <PageHeader
-        title="Importation de données Excel"
+        title="Importer Excel"
         subtitle="Intégration des fichiers de facturation, paiements, clients et créances."
+        nextAction="Choisissez le type de fichier, puis déposez le Excel."
         actions={<Stepper steps={["Sélection", "Validation", "Rapport"]} current={step} />}
       />
 
