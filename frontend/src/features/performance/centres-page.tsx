@@ -94,9 +94,9 @@ function aggregateRows(rows: ReportRow[], centre: string, agency: string): Centr
     if (centre && rowCentre !== centre) continue;
     if (agency && rowAgency !== agency) continue;
 
-    const enc = numberValue(row.total_dette_balance_fcfa);
+    /*const enc = numberValue(row.total_dette_balance_fcfa);
     const imp = numberValue(row.total_impaye_flux_fcfa);
-    const fac = numberValue(row.total_facture_fcfa);
+    const fac = numberValue(row.total_facture_fcfa);*/
 
     const current = groups.get(rowCentre) ?? {
       centre: rowCentre,
@@ -1388,7 +1388,7 @@ export function CentresPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative w-48">
                   <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-on-surface-variant" />
-                  <Input
+                  <input
                     placeholder="Filtrer un centre..."
                     value={tableSearch}
                     onChange={(e) => setTableSearch(e.target.value)}
@@ -1660,7 +1660,7 @@ export function CentresPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-container-low p-3 rounded-lg">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-on-surface-variant" />
-              <Input
+              <input
                 placeholder="Rechercher raison sociale, compte, code..."
                 value={drilldownSearch}
                 onChange={(e) => { setDrilldownSearch(e.target.value); setDrilldownPage(1); }}
@@ -1915,7 +1915,7 @@ export function CentresPage() {
             </p>
             <div className="relative w-64">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-on-surface-variant" />
-              <Input
+              <input
                 placeholder="Rechercher client..."
                 value={identifiedSearch}
                 onChange={(e) => setIdentifiedSearch(e.target.value)}
