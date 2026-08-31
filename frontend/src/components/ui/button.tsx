@@ -7,8 +7,9 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "bg-primary text-on-primary hover:bg-primary-container",
-        gold: "bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed",
+        primary: "bg-primary text-on-primary hover:bg-brand-700",
+        copper: "bg-copper text-on-copper hover:bg-copper-700",
+        gold: "bg-copper text-on-copper hover:bg-copper-700",
         outline: "border border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container-high",
         ghost: "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface",
         danger: "bg-error text-on-error hover:bg-error/90",

@@ -145,6 +145,43 @@ async def export_report_csv(
 
 
 # ============================================================
+# Analyse de la dette — aging analytics
+# ============================================================
+
+@router.get("/dashboards/aging-by-centre", response_model=List[schemas.ReportRow])
+async def aging_by_centre(
+    centre: str | None = Query(None),
+    agence: str | None = Query(None),
+    marche: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await crud.debt_aging_by_centre(db, centre=centre, agence=agence, marche=marche)
+
+
+@router.get("/dashboards/aging-by-agence", response_model=List[schemas.ReportRow])
+async def aging_by_agence(
+    centre: str | None = Query(None),
+    marche: str | None = Query(None),
+    limit: int = Query(10),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await crud.debt_aging_by_agence(db, centre=centre, marche=marche, limit=limit)
+
+
+@router.get("/dashboards/aging-trend", response_model=List[schemas.ReportRow])
+async def aging_trend(
+    centre: str | None = Query(None),
+    agence: str | None = Query(None),
+    marche: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await crud.debt_aging_trend(db, centre=centre, agence=agence, marche=marche)
+
+
+# ============================================================
 # Analytics décisionnels
 # ============================================================
 

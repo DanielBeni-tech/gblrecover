@@ -8,10 +8,10 @@
 | **Organisation** | CAMTEL |
 | **Document** | Design System officiel |
 | **Public** | Product Designers, UX Designers, UI Designers, développeurs frontend, QA et Product Managers |
-| **Version** | 1.0 |
+| **Version** | 1.1 |
 | **Statut** | Référence de conception et d’implémentation |
-| **Direction** | Lead Product Design |
-| **Date** | 7 août 2026 |
+| **Direction** | Canopée CAMTEL |
+| **Date** | 31 août 2026 |
 
 > **Rôle du document.** Ce Design System définit le langage visuel, les règles d’interaction et les composants réutilisables de GBLRecover. Il doit être utilisé comme source commune par les designers et les développeurs afin de produire une expérience cohérente, accessible et opérationnelle.
 
@@ -23,7 +23,7 @@
 
 GBLRecover est une plateforme métier destinée à des utilisateurs qui doivent comprendre rapidement une situation client, analyser une dette, suivre des créances et décider d’une action. Le Design System ne cherche donc pas un effet décoratif : il doit **rendre l’information financière lisible, la décision plus sûre et l’action plus rapide**.
 
-L’interface adopte une esthétique professionnelle, calme et structurée. Elle combine une base neutre claire, un teal de marque inspiré de la confiance et de la maîtrise, des états fonctionnels immédiatement identifiables et une hiérarchie typographique robuste.
+L’interface adopte une esthétique professionnelle, calme et structurée — palette **Canopée CAMTEL** : un ivoire chaud, une encre forestière, un teal profond, un cuivre pour les actions. Les états fonctionnels restent immédiatement identifiables.
 
 ### 1.1 Positionnement visuel
 
@@ -33,7 +33,7 @@ L’interface adopte une esthétique professionnelle, calme et structurée. Elle
 | **Densité** | Moyenne à élevée, mais avec respiration et groupement explicite |
 | **Contraste** | Fort pour les données critiques, modéré pour les informations secondaires |
 | **Formes** | Angles légèrement arrondis, surfaces sobres, bordures discrètes |
-| **Couleur** | Teal de marque ; couleurs d’état réservées à leur usage sémantique |
+| **Couleur** | Teal Canopée `#0F5C56`, fond ivoire `#F6F3EC`, accent cuivre `#C45C26` ; couleurs d’état réservées à leur usage sémantique |
 | **Mouvement** | Court, fonctionnel et jamais distrayant |
 
 ### 1.2 Promesse d’expérience
@@ -91,30 +91,31 @@ Les erreurs sont formulées sans blâme. Les alertes indiquent le problème et l
 
 ## 4. Palette officielle
 
-### 4.1 Couleurs de marque
+### 4.1 Couleurs de marque (Canopée CAMTEL)
 
 | Token | Valeur | Usage |
 |---|---|---|
-| `brand-700` | `#115E59` | État actif profond, texte sur fond clair |
-| `brand-600` | `#0F766E` | Couleur primaire principale |
-| `brand-500` | `#14B8A6` | Accent, focus visuel, éléments interactifs secondaires |
-| `brand-100` | `#CCFBF1` | Fond d’information de marque |
-| `brand-50` | `#F0FDFA` | Surfaces légères et états sélectionnés |
+| `brand-700` | `#0C4A45` | État actif profond, texte sur fond clair |
+| `brand-600` | `#0F5C56` | Couleur primaire principale (teal Canopée) |
+| `brand-500` | `#1A7069` | Focus visuel, éléments interactifs secondaires |
+| `brand-100` | `#D4E8E6` | Fond d’information de marque |
+| `brand-50` | `#EEF6F5` | Surfaces légères et états sélectionnés |
+| `copper-600` | `#C45C26` | CTA public, créances, accent d’action |
 
-### 4.2 Neutres
+### 4.2 Neutres (ivoire / encre)
 
 | Token | Valeur | Usage |
 |---|---|---|
-| `slate-950` | `#020617` | Texte exceptionnellement fort |
-| `slate-900` | `#0F172A` | Titres, navigation et textes prioritaires |
-| `slate-700` | `#334155` | Texte principal secondaire |
-| `slate-600` | `#475569` | Texte secondaire |
-| `slate-400` | `#94A3B8` | Placeholder et informations atténuées |
-| `slate-300` | `#CBD5E1` | Bordures et séparateurs |
-| `slate-200` | `#E2E8F0` | Bordures légères, surfaces secondaires |
-| `slate-100` | `#F1F5F9` | Fond de page ou de section |
-| `slate-50` | `#F8FAFC` | Surface principale claire |
-| `white` | `#FFFFFF` | Cartes et surfaces de contraste |
+| `slate-950` | `#0C1513` | Texte exceptionnellement fort |
+| `slate-900` | `#14221F` | Titres, navigation et textes prioritaires (encre) |
+| `slate-700` | `#2A332F` | Texte principal secondaire |
+| `slate-600` | `#3D433F` | Texte secondaire |
+| `slate-400` | `#8A8578` | Placeholder et informations atténuées |
+| `slate-300` | `#C9C0AE` | Bordures et séparateurs |
+| `slate-200` | `#DDD6C6` | Bordures légères, surfaces secondaires |
+| `slate-100` | `#EDE8DC` | Fond de section |
+| `slate-50` | `#F6F3EC` | Surface principale ivoire |
+| `white` | `#FFFCF6` | Cartes (`surface-bright`) |
 
 ### 4.3 Couleurs sémantiques
 
@@ -135,19 +136,21 @@ Les erreurs sont formulées sans blâme. Les alertes indiquent le problème et l
 
 ```css
 :root {
-  --color-brand-600: #0f766e;
-  --color-brand-500: #14b8a6;
-  --color-surface: #ffffff;
-  --color-background: #f8fafc;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
-  --color-border: #cbd5e1;
+  --color-brand-600: #0f5c56;
+  --color-copper-600: #c45c26;
+  --color-surface: #fffcf6;
+  --color-background: #f6f3ec;
+  --color-text-primary: #14221f;
+  --color-text-secondary: #3d433f;
+  --color-border: #ddd6c6;
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-danger: #dc2626;
   --color-info: #2563eb;
 }
 ```
+
+Tokens d’implémentation : `frontend/src/index.css`. Voir aussi `DESIGN.md`.
 
 ---
 
@@ -584,6 +587,23 @@ Avant livraison, une interface GBLRecover doit répondre aux questions suivantes
 Le Design System officiel de GBLRecover fournit un cadre visuel et comportemental commun pour construire une plateforme de Revenue Assurance fiable, lisible et évolutive. Sa valeur ne réside pas uniquement dans la palette ou les composants : elle réside dans la discipline de réutilisation, la prise en compte des états, l’accessibilité et la capacité à transformer des données complexes en décisions compréhensibles.
 
 Toute nouvelle fonctionnalité doit enrichir le système sans fragmenter l’expérience. Les exceptions sont documentées, les composants sont gouvernés et les tokens restent la source commune entre Figma et le code.
+
+## 22. Landing publique, login et équipe
+
+La route `/` est publique. Elle présente le produit avant authentification : hero illustré 16:9, promesse « Voir juste. Comprendre vite. Agir. », CTA unique **Se connecter**. Un utilisateur déjà connecté voit **Ouvrir l’espace** vers `/vue-nationale`.
+
+Le login (`/login`) est un écran split : illustration 3:4 + formulaire. Pas de jargon marketing.
+
+Section équipe (placeholders `frontend/public/team/`) :
+
+| Nom | Rôle |
+|---|---|
+| Daniel Beni Mpodol Welisan | Fullstack JS, frontend, responsable UI/UX |
+| Nkoumou Tsade Nikaise Germain | Fullstack Python, backend, responsable des API |
+| Evijo Evina | Backend Python, logique métier et base de données |
+| Kegne Ange | Architecture globale de la base de données |
+| Soudjonk Divine | Recette, documentation utilisateur et qualité des parcours |
+| Balawe Chips | DevOps, Docker et mise en production |
 
 ## Références
 

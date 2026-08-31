@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ToastProvider } from "@/components/ui/toast";
+import { GlobalQueryLoader } from "@/components/ui/loading";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/features/auth/login-page";
+import { HomePage } from "@/features/marketing/home-page";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { ReceivablesPage } from "@/features/receivables/receivables-page";
 import { CentresPage } from "@/features/performance/centres-page";
@@ -35,7 +37,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
+        <GlobalQueryLoader />
         <Routes>
+          <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
             element={
@@ -44,8 +48,6 @@ export default function App() {
               </RequireAuth>
             }
           >
-            {/* Redirections et routes principales de la navigation */}
-            <Route path="/" element={<Navigate to="/vue-nationale" replace />} />
             <Route path="/vue-nationale" element={<DashboardPage />} />
             <Route path="/dashboard" element={<Navigate to="/vue-nationale" replace />} />
 
@@ -59,7 +61,6 @@ export default function App() {
             <Route path="/referentiels" element={<ReferentielsPage />} />
             <Route path="/administration" element={<Navigate to="/referentiels" replace />} />
 
-            {/* Vues complémentaires */}
             <Route path="/clients" element={<ClientsPage />} />
             <Route path="/clients/:id" element={<CustomerDetailPage />} />
             <Route path="/factures" element={<InvoicesPage />} />

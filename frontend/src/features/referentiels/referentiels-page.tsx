@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Avatar } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/ui/loading";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -277,7 +277,8 @@ export function ReferentielsPage() {
     <div className="space-y-5">
       <PageHeader
         title="Référentiels organisationnels"
-        subtitle="Vue d'ensemble, exploration et drill-down dans la structure des centres, agences et gestionnaires."
+        subtitle="Centres, agences et gestionnaires — une structure pour filtrer le reste de l’espace."
+        nextAction="Sélectionnez un centre pour afficher ses agences."
       />
 
       {hasError && (
@@ -354,17 +355,15 @@ export function ReferentielsPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={4}>
-                        <Skeleton className="h-6 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <Loading className="py-8" />
+                    </TableCell>
+                  </TableRow>
                 ) : processedCentres.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="py-6 text-center text-[13px] text-on-surface-variant">
-                      Aucun centre trouvé.
+                      Aucun centre pour cette recherche. Effacez le filtre.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -455,17 +454,15 @@ export function ReferentielsPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={4}>
-                        <Skeleton className="h-6 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <Loading className="py-8" />
+                    </TableCell>
+                  </TableRow>
                 ) : processedAgencies.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="py-6 text-center text-[13px] text-on-surface-variant">
-                      Aucune agence trouvée.
+                      Aucune agence pour cette recherche. Sélectionnez un autre centre.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -568,17 +565,15 @@ export function ReferentielsPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={7}>
-                        <Skeleton className="h-6 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      <Loading className="py-8" />
+                    </TableCell>
+                  </TableRow>
                 ) : processedManagers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="py-8 text-center text-[13px] text-on-surface-variant">
-                      Aucun gestionnaire correspondant trouvé.
+                      Aucun gestionnaire pour ces filtres. Choisissez une agence ou élargissez la recherche.
                     </TableCell>
                   </TableRow>
                 ) : (

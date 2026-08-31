@@ -17,7 +17,7 @@ export function KpiCard({
   return (
     <div
       className={cn(
-        "rounded-card border bg-surface-container-lowest p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-all",
+        "rounded-card border bg-surface-container-lowest p-4 shadow-card transition-all",
         tone === "error" ? "border-error/40" : tone === "success" ? "border-success/40" : tone === "warning" ? "border-warning/40" : "border-outline-variant",
       )}
     >

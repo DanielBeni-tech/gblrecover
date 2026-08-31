@@ -33,9 +33,10 @@ import {
 } from "@/api/client";
 import type { AggregatedClientRow, DetailedAccountRow } from "@/api/client";
 import type { ReportRow } from "@/api/types";
+//import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loading, PageLoading } from "@/components/ui/loading";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -394,8 +395,9 @@ export function CentresPage() {
       {/* 1. Header & Freshness Banner */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
-          title="Performance — Centres"
-          subtitle="Comparez les centres de gestion et identifiez les écarts de performance."
+          title="Comparer les centres"
+          subtitle="Écarts de performance entre centres de gestion."
+          nextAction="Comparez les écarts, puis descendez vers une agence."
         />
         <div className="flex flex-wrap items-center gap-2 sm:self-start">
           <div className="flex items-center gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-[12px] shadow-xs">
@@ -511,7 +513,7 @@ export function CentresPage() {
               </div>
             </div>
             <div className="mt-2 text-2xl font-bold tracking-tight text-on-surface">
-              {reportQ.isLoading ? <Skeleton className="h-8 w-28" /> : xafCompact(totals.encours)}
+              {reportQ.isLoading ? <Loading className="items-start py-1" /> : xafCompact(totals.encours)}
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-[11px]">
               <span className="inline-flex items-center font-bold text-success">
@@ -535,7 +537,7 @@ export function CentresPage() {
               </div>
             </div>
             <div className="mt-2 text-2xl font-bold tracking-tight text-error">
-              {reportQ.isLoading ? <Skeleton className="h-8 w-28" /> : xafCompact(totals.impaye || totals.dette30j)}
+              {reportQ.isLoading ? <Loading className="items-start py-1" /> : xafCompact(totals.impaye || totals.dette30j)}
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-[11px]">
               <span className="inline-flex items-center font-bold text-error">
@@ -559,7 +561,7 @@ export function CentresPage() {
               </div>
             </div>
             <div className="mt-2 text-2xl font-bold tracking-tight text-on-surface">
-              {reportQ.isLoading ? <Skeleton className="h-8 w-20" /> : percent(recovery)}
+              {reportQ.isLoading ? <Loading className="items-start py-1" /> : percent(recovery)}
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-[11px]">
               <span className="inline-flex items-center font-bold text-error">
@@ -590,7 +592,7 @@ export function CentresPage() {
                 </div>
               </div>
               <div className="mt-2 text-2xl font-bold tracking-tight text-on-surface">
-                {reportQ.isLoading ? <Skeleton className="h-8 w-20" /> : "72,4 %"}
+                {reportQ.isLoading ? <Loading className="items-start py-1" /> : "72,4 %"}
               </div>
               <div className="mt-2 flex items-center gap-1.5 text-[11px]">
                 <span className="inline-flex items-center font-bold text-error">
@@ -621,7 +623,7 @@ export function CentresPage() {
                 </div>
               </div>
               <div className="mt-2 text-2xl font-bold tracking-tight text-on-surface">
-                {reportQ.isLoading ? <Skeleton className="h-8 w-24" /> : totals.arretes.toLocaleString("fr-FR")}
+                {reportQ.isLoading ? <Loading className="items-start py-1" /> : totals.arretes.toLocaleString("fr-FR")}
               </div>
               <div className="mt-2 flex items-center gap-1.5 text-[11px]">
                 <span className="inline-flex items-center font-bold text-error">
@@ -1435,17 +1437,15 @@ export function CentresPage() {
 
               <TableBody>
                 {reportQ.isLoading ? (
-                  Array.from({ length: 5 }, (_, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell colSpan={11}>
-                        <Skeleton className="h-8 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <TableRow>
+                    <TableCell colSpan={11}>
+                      <Loading className="py-10" />
+                    </TableCell>
+                  </TableRow>
                 ) : displayedTableRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={11} className="py-8 text-center text-sm text-on-surface-variant">
-                      Aucun centre ne correspond à la recherche.
+                      Aucun centre pour cette recherche. Effacez le filtre ou changez de période.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -1701,7 +1701,7 @@ export function CentresPage() {
           {stoppedTab === "clients" && (
             <div className="space-y-3">
               {stoppedClientsQ.isLoading ? (
-                <Skeleton className="h-64 w-full" />
+                <PageLoading />
               ) : stoppedClientsQ.isError ? (
                 <div className="rounded-lg border border-error/30 bg-error-container p-4 text-xs text-on-error-container">
                   Erreur lors du chargement des clients.
@@ -1803,7 +1803,7 @@ export function CentresPage() {
           {stoppedTab === "comptes" && (
             <div className="space-y-3">
               {stoppedAccountsQ.isLoading ? (
-                <Skeleton className="h-64 w-full" />
+                <PageLoading />
               ) : stoppedAccountsQ.isError ? (
                 <div className="rounded-lg border border-error/30 bg-error-container p-4 text-xs text-on-error-container">
                   Erreur lors du chargement des comptes.
@@ -1925,7 +1925,7 @@ export function CentresPage() {
           </div>
 
           {identifiedClientsQ.isLoading ? (
-            <Skeleton className="h-64 w-full" />
+            <PageLoading />
           ) : (identifiedClientsQ.data ?? []).length === 0 ? (
             <div className="py-10 text-center text-sm text-on-surface-variant">
               Aucun client identifié trouvé.

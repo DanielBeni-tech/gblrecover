@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { listInvoices, listInvoicesCountFiltered } from "@/api/client";
 import type { Invoice } from "@/api/types";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoading } from "@/components/ui/loading";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { xaf, dateFr } from "@/lib/format";
 
@@ -90,7 +91,11 @@ export function InvoicesPage() {
 
   return (
     <>
-      <PageHeader title="Factures" subtitle="Consultez les factures émises, leurs statuts et les soldes restants." />
+      <PageHeader
+        title="Factures"
+        subtitle="Factures émises, statuts et soldes restants."
+        nextAction="Recherchez une facture, puis ouvrez le compte client."
+      />
       <Card className="p-4">
         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-12">
           <div className="md:col-span-8">
@@ -118,19 +123,15 @@ export function InvoicesPage() {
           </p>
         </div>
         {isLoading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
+          <PageLoading />
         ) : items.length === 0 ? (
           <EmptyState
-            title="Aucune facture dans ce périmètre"
-            description="Vérifiez les filtres de recherche et de statut, ou consultez un client pour voir ses factures."
+            title="Aucune facture pour ces filtres"
+            description="Vérifiez le numéro, le statut, ou ouvrez un client pour voir ses factures."
             action={
-              <Button variant="outline" size="sm" onClick={() => {}}>
-                Consulter un client
-              </Button>
+              <Link to="/clients" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                Ouvrir un client
+              </Link>
             }
           />
         ) : (
