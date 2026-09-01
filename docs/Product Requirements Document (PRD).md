@@ -10,7 +10,7 @@
 | **Domaine** | Revenue Assurance, facturation, paiements et recouvrement |
 | **Version du document** | 1.0 |
 | **Statut** | Version finale de cadrage produit |
-| **Auteur** | Manus AI — Senior Product Management |
+| **Auteur** | Danielbeni-tech — Senior Product Management |
 | **Date** | 7 août 2026 |
 
 > **Note de cadrage.** Ce document formalise les besoins fonctionnels et produit à partir du contexte fourni. Les règles de gestion, seuils de recouvrement, interfaces avec les systèmes existants et indicateurs chiffrés devront être validés avec les équipes métier et techniques de CAMTEL avant lancement du développement.

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+.env
+.venv
+venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# VSCode
+.vscode/
+.history/
+
+# IDEs
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# SQLite
+*.sqlite3
+
+# Frontend / Node
+node_modules/
+/frontend/node_modules/
+/frontend/dist/
+
+# Docker
+docker-compose.override.yml

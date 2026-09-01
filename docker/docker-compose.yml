@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: gblrecover-db
+    restart: unless-stopped
+    environment:
+      # GBL_* avoids inheriting POSTGRES_USER from another project (e.g. carburflow).
+      POSTGRES_DB: ${GBL_POSTGRES_DB:-gblrecover}
+      POSTGRES_USER: ${GBL_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${GBL_POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - gblrecover_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile.Backend
+    container_name: gblrecover-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${GBL_POSTGRES_USER:-postgres}:${GBL_POSTGRES_PASSWORD:-postgres}@db:5432/${GBL_POSTGRES_DB:-gblrecover}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    ports:
+      - "8001:8001"
+    volumes:
+      - "../database/GBL - Juillet 2026.xlsx:/app/database/GBL - Juillet 2026.xlsx:ro"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile.frontend
+    container_name: gblrecover-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
+      VITE_API_PREFIX: ${VITE_API_PREFIX:-/api/v1}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  gblrecover_pgdata:

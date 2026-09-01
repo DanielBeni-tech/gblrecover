@@ -1,0 +1,20 @@
+SELECT 
+    f.date_emission,
+    TRIM(REPLACE(REPLACE(f.libelle_periode, 'Facture', ''), 'Impayés', '')) AS mois_annee,
+    
+    -- Volume total d'opérations sur le mois
+    COUNT(f.id_facture) AS volume_total_transactions,
+    
+    -- Montant total des factures émises
+    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) AS montant_facture,
+    
+    -- Montant des impayés
+    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS montant_impaye,
+    
+    -- Montant réellement recouvré / payé
+    SUM(CASE WHEN f.type_flux = 'FACTURE' THEN f.montant_facture ELSE 0 END) - 
+    SUM(CASE WHEN f.type_flux = 'IMPAYE' THEN f.montant_facture ELSE 0 END) AS montant_recouvre
+
+FROM facture f
+GROUP BY f.date_emission, TRIM(REPLACE(REPLACE(f.libelle_periode, 'Facture', ''), 'Impayés', ''))
+ORDER BY f.date_emission ASC;

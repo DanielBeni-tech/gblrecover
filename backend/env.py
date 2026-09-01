@@ -1,0 +1,1 @@
+DATABASE_URL=postgresql://postgres:ton_mot_de_passe@localhost:5432/gblrecover

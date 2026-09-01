@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic>=2,<3
+sqlalchemy
+alembic
+asyncpg
+python-dotenv
+passlib[bcrypt]
+bcrypt<4.1
+pandas
+psycopg2-binary
+openpyxl
+python-multipart
